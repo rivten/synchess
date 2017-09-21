@@ -57,6 +57,8 @@ struct game_state
 	bool IsInitialized;
 };
 
+#define TILE_PER_SIDE 8
+
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
 void GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
 {
@@ -78,13 +80,39 @@ void GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Rendere
 		GameState->IsInitialized = true;
 	}
 
-	BeginRender(&GameState->Renderer);
+	renderer* Renderer = &GameState->Renderer;
 
-	PushClear(&GameState->Renderer, V4(0.0f, 0.0f, 0.0f, 1.0f));
+	BeginRender(Renderer);
+
+	PushClear(Renderer, V4(0.0f, 0.0f, 0.0f, 1.0f));
+
+	BeginUI(Renderer);
+
+	const u32 BoardSizeInPixels = 256;
+	v2 BoardSize = V2(BoardSizeInPixels, BoardSizeInPixels);
+	v2 BoardMin = 0.5f * V2(GlobalWindowWidth, GlobalWindowHeight) - 0.5f * BoardSize;
+	rect2 BoardRect = RectFromMinSize(BoardMin, BoardSize);
+
+	v2 TileSize = BoardSize / TILE_PER_SIDE;
+
+	for(u32 TileY = 0; TileY < TILE_PER_SIDE; ++TileY)
+	{
+		for(u32 TileX = 0; TileX < TILE_PER_SIDE; ++TileX)
+		{
+			v2 TileMin = Hadamard(V2(TileX, TileY), TileSize) + BoardMin;
+			rect2 TileRect = RectFromMinSize(TileMin, TileSize);
+			bool IsWhiteTile = (TileX + TileY) % 2 == 0;
+			v4 TileBackgroundColor = (IsWhiteTile) ? V4(1.0f, 1.0f, 1.0f, 1.0f) : V4(0.0f, 1.0f, 0.0f, 1.0f);
+			PushRect(Renderer, TileRect, TileBackgroundColor);
+		}
+	}
+
+	EndUI(Renderer);
+
 
 	// NOTE(hugo): Render the commands
-	Render(&GameState->Renderer);
-	EndRender(&GameState->Renderer);
+	Render(Renderer);
+	EndRender(Renderer);
 }
 
 s32 main(s32 ArgumentCount, char** Arguments)
