@@ -1,10 +1,10 @@
 #pragma once
 
 // TODO(hugo) : Parameter order is shit.
-void InitRenderer(renderer* Renderer, SDL_Renderer* SDLRenderer, u32 RenderArenaSize,
+void InitialiseRenderer(renderer* Renderer, SDL_Renderer* SDLRenderer, u32 RenderArenaSize,
 		v2 WindowSizeInPixels, camera* Camera, float PixelsToMeters, void* BaseMemory)
 {
-	InitializeArena(&Renderer->Arena, RenderArenaSize, BaseMemory);
+	InitialiseArena(&Renderer->Arena, RenderArenaSize, BaseMemory);
 	Renderer->CommandCount = 0;
 	Renderer->TemporaryMemory = {};
 	Renderer->SDLContext = SDLRenderer;

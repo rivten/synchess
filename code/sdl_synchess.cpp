@@ -23,7 +23,8 @@ struct camera
 	float FocalLength;
 };
 
-SDL_Rect SDLRect(rect2 Rect)
+internal SDL_Rect
+SDLRect(rect2 Rect)
 {
 	SDL_Rect Result = {};
 	v2 Size = RectSize(Rect);
@@ -35,7 +36,8 @@ SDL_Rect SDLRect(rect2 Rect)
 	return(Result);
 }
 
-void SDLSetRenderColor(SDL_Renderer* Renderer, v4 Color)
+internal void
+SDLSetRenderColor(SDL_Renderer* Renderer, v4 Color)
 {
 	SDL_SetRenderDrawColor(Renderer, 255 * Color.r, 255 * Color.g, 255 * Color.b, 255 * Color.a);
 }
@@ -50,21 +52,249 @@ struct game_memory
 	void* Storage;
 };
 
+#define TILE_PER_SIDE 8
+
+enum chess_piece_type
+{
+	ChessPieceType_Pawn,
+	ChessPieceType_Knight,
+	ChessPieceType_Bishop,
+	ChessPieceType_Rook,
+	ChessPieceType_Queen,
+	ChessPieceType_King,
+
+	ChessPieceType_Count,
+};
+
+enum chess_piece_color
+{
+	ChessPieceColor_White,
+	ChessPieceColor_Black,
+};
+
+struct chess_piece
+{
+	chess_piece_type Type;
+	chess_piece_color Color;
+};
+
+typedef chess_piece* board_tile;
+
 struct game_state
 {
 	renderer Renderer;
 	camera Camera;
-	bool IsInitialized;
+	memory_arena GameArena;
+
+	board_tile Chessboard[TILE_PER_SIDE * TILE_PER_SIDE];
+
+	bool IsInitialised;
 };
 
-#define TILE_PER_SIDE 8
+struct rgb8
+{
+	u8 r;
+	u8 g;
+	u8 b;
+};
+
+internal rgb8
+RGB8(u8 r, u8 g, u8 b)
+{
+	rgb8 Result = {r, g, b};
+	return(Result);
+}
+
+internal v4
+RGB8ToV4(rgb8 Color)
+{
+	v4 Result = V4(Color.r, Color.g, Color.b, 1.0f);
+	Result = Result / 255.0f;
+
+	return(Result);
+}
+
+internal void
+InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
+{
+	// NOTE(hugo) : White setup
+	Chessboard[0 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[0 + 8 * 0]->Type = ChessPieceType_Rook;
+	Chessboard[0 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[1 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[1 + 8 * 0]->Type = ChessPieceType_Knight;
+	Chessboard[1 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[2 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[2 + 8 * 0]->Type = ChessPieceType_Bishop;
+	Chessboard[2 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[3 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[3 + 8 * 0]->Type = ChessPieceType_Queen;
+	Chessboard[3 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[4 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[4 + 8 * 0]->Type = ChessPieceType_King;
+	Chessboard[4 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[5 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[5 + 8 * 0]->Type = ChessPieceType_Bishop;
+	Chessboard[5 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[6 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[6 + 8 * 0]->Type = ChessPieceType_Knight;
+	Chessboard[6 + 8 * 0]->Color = ChessPieceColor_White;
+
+	Chessboard[7 + 8 * 0] = PushStruct(GameArena, chess_piece);
+	Chessboard[7 + 8 * 0]->Type = ChessPieceType_Rook;
+	Chessboard[7 + 8 * 0]->Color = ChessPieceColor_White;
+
+	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
+	{
+		Chessboard[RowIndex + 8 * 1] = PushStruct(GameArena, chess_piece);
+		Chessboard[RowIndex + 8 * 1]->Type = ChessPieceType_Pawn;
+		Chessboard[RowIndex + 8 * 1]->Color = ChessPieceColor_White;
+	}
+
+	// NOTE(hugo) : Black setup
+	Chessboard[0 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[0 + 8 * 7]->Type = ChessPieceType_Rook;
+	Chessboard[0 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[1 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[1 + 8 * 7]->Type = ChessPieceType_Knight;
+	Chessboard[1 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[2 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[2 + 8 * 7]->Type = ChessPieceType_Bishop;
+	Chessboard[2 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[3 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[3 + 8 * 7]->Type = ChessPieceType_Queen;
+	Chessboard[3 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[4 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[4 + 8 * 7]->Type = ChessPieceType_King;
+	Chessboard[4 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[5 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[5 + 8 * 7]->Type = ChessPieceType_Bishop;
+	Chessboard[5 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[6 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[6 + 8 * 7]->Type = ChessPieceType_Knight;
+	Chessboard[6 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	Chessboard[7 + 8 * 7] = PushStruct(GameArena, chess_piece);
+	Chessboard[7 + 8 * 7]->Type = ChessPieceType_Rook;
+	Chessboard[7 + 8 * 7]->Color = ChessPieceColor_Black;
+
+	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
+	{
+		Chessboard[RowIndex + 8 * 6] = PushStruct(GameArena, chess_piece);
+		Chessboard[RowIndex + 8 * 6]->Type = ChessPieceType_Pawn;
+		Chessboard[RowIndex + 8 * 6]->Color = ChessPieceColor_Black;
+	}
+}
+
+internal void
+DisplayChessboardToConsole(board_tile* Chessboard)
+{
+	for(s32 LineIndex = TILE_PER_SIDE - 1; LineIndex >= 0; --LineIndex)
+	{
+		for(u32 RowIndex = 0; RowIndex < TILE_PER_SIDE; ++RowIndex)
+		{
+			chess_piece* Piece = Chessboard[RowIndex + 8 * LineIndex];
+			if(Piece)
+			{
+				switch(Piece->Type)
+				{
+					case ChessPieceType_Pawn:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("p");
+							}
+							else
+							{
+								printf("P");
+							}
+						} break;
+					case ChessPieceType_Knight:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("n");
+							}
+							else
+							{
+								printf("N");
+							}
+						} break;
+					case ChessPieceType_Bishop:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("b");
+							}
+							else
+							{
+								printf("B");
+							}
+						} break;
+					case ChessPieceType_Rook:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("r");
+							}
+							else
+							{
+								printf("R");
+							}
+						} break;
+					case ChessPieceType_Queen:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("q");
+							}
+							else
+							{
+								printf("Q");
+							}
+						} break;
+					case ChessPieceType_King:
+						{
+							if(Piece->Color == ChessPieceColor_White)
+							{
+								printf("k");
+							}
+							else
+							{
+								printf("K");
+							}
+						} break;
+					InvalidDefaultCase;
+				}
+			}
+			else
+			{
+				printf(".");
+			}
+		}
+		printf("\n");
+	}
+}
 
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
-void GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
+internal void
+GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
 {
 	Assert(sizeof(game_state) <= GameMemory->StorageSize);
 	game_state* GameState = (game_state*) GameMemory->Storage;
-	if(!GameState->IsInitialized)
+	if(!GameState->IsInitialised)
 	{
 		u64 RenderArenaSize = Megabytes(128);
 		Assert(sizeof(game_state) + RenderArenaSize <= GameMemory->StorageSize);
@@ -74,10 +304,17 @@ void GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Rendere
 		float PixelsToMeters = 1.0f / 10.0f;
 
 		// TODO(hugo) : Resizable window
-		InitRenderer(&GameState->Renderer, SDLRenderer, RenderArenaSize,
+		InitialiseRenderer(&GameState->Renderer, SDLRenderer, RenderArenaSize,
 				V2(GlobalWindowWidth, GlobalWindowHeight), &GameState->Camera, PixelsToMeters, RenderArenaMemoryBase);
 
-		GameState->IsInitialized = true;
+		u64 GameArenaSize = Megabytes(128);
+		void* GameArenaMemoryBase = (u8*)GameMemory->Storage + sizeof(game_state) + RenderArenaSize;
+		InitialiseArena(&GameState->GameArena, GameArenaSize, GameArenaMemoryBase);
+		InitialiseChessboard(GameState->Chessboard, &GameState->GameArena);
+
+		DisplayChessboardToConsole(GameState->Chessboard);
+
+		GameState->IsInitialised = true;
 	}
 
 	renderer* Renderer = &GameState->Renderer;
@@ -88,21 +325,22 @@ void GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Rendere
 
 	BeginUI(Renderer);
 
-	const u32 BoardSizeInPixels = 256;
+	const u32 BoardSizeInPixels = 512;
 	v2 BoardSize = V2(BoardSizeInPixels, BoardSizeInPixels);
 	v2 BoardMin = 0.5f * V2(GlobalWindowWidth, GlobalWindowHeight) - 0.5f * BoardSize;
 	rect2 BoardRect = RectFromMinSize(BoardMin, BoardSize);
 
-	v2 TileSize = BoardSize / TILE_PER_SIDE;
+	u32 TileSizeInPixels = (u32)(BoardSizeInPixels / TILE_PER_SIDE);
+	v2i TileSize = V2i(TileSizeInPixels, TileSizeInPixels);
 
 	for(u32 TileY = 0; TileY < TILE_PER_SIDE; ++TileY)
 	{
 		for(u32 TileX = 0; TileX < TILE_PER_SIDE; ++TileX)
 		{
-			v2 TileMin = Hadamard(V2(TileX, TileY), TileSize) + BoardMin;
-			rect2 TileRect = RectFromMinSize(TileMin, TileSize);
+			v2 TileMin = Hadamard(V2(TileX, TileY), V2(TileSize)) + BoardMin;
+			rect2 TileRect = RectFromMinSize(TileMin, V2(TileSize));
 			bool IsWhiteTile = (TileX + TileY) % 2 == 0;
-			v4 TileBackgroundColor = (IsWhiteTile) ? V4(1.0f, 1.0f, 1.0f, 1.0f) : V4(0.0f, 1.0f, 0.0f, 1.0f);
+			v4 TileBackgroundColor = (IsWhiteTile) ? V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
 			PushRect(Renderer, TileRect, TileBackgroundColor);
 		}
 	}
@@ -135,7 +373,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	Assert(Renderer);
 
 	game_memory GameMemory = {};
-	GameMemory.StorageSize = Megabytes(256);
+	GameMemory.StorageSize = Megabytes(512);
 	GameMemory.Storage = Allocate_(GameMemory.StorageSize);
 
 	Assert(GameMemory.Storage);
@@ -239,3 +477,4 @@ s32 main(s32 ArgumentCount, char** Arguments)
 
 	return(0);
 }
+
