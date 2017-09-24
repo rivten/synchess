@@ -9,7 +9,7 @@
 
 #include "input.h"
 
-global_variable u32 GlobalWindowWidth = 1024;
+global_variable u32 GlobalWindowWidth = 512;
 global_variable u32 GlobalWindowHeight = 512;
 
 struct camera
@@ -42,6 +42,53 @@ SDLSetRenderColor(SDL_Renderer* Renderer, v4 Color)
 	SDL_SetRenderDrawColor(Renderer, 255 * Color.r, 255 * Color.g, 255 * Color.b, 255 * Color.a);
 }
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+struct bitmap
+{
+	u32 Width;
+	u32 Height;
+	void* Data;
+
+	// NOTE(hugo) : Offset is in percent relative to the bitmap size
+	v2 Offset;
+	bool IsValid;
+};
+
+u32 SafeCastToU32(s32 Value)
+{
+	Assert(Value >= 0);
+	u32 Result = (u32)Value;
+	return(Result);
+}
+
+bitmap LoadBitmap(char* Filename, v2 Offset = V2(0.0f, 0.0f))
+{
+	// TODO(hugo) : Load off an arena
+	bitmap Result = {};
+	s32 Depth = 0;
+	s32 Width = 0;
+	s32 Height = 0;
+	Result.Data = stbi_load(Filename, &Width, &Height, &Depth, 4);
+	Assert(Result.Data);
+
+	Result.Width = SafeCastToU32(Width);
+	Result.Height = SafeCastToU32(Height);
+	Assert(Result.Width > 0);
+	Assert(Result.Height > 0);
+
+	Result.Offset = Offset;
+
+	Result.IsValid = true;
+
+	return(Result);
+}
+
+void FreeBitmap(bitmap Bitmap)
+{
+	stbi_image_free(Bitmap.Data);
+}
+
 
 #include "render.h"
 #include "render.cpp"
@@ -52,7 +99,7 @@ struct game_memory
 	void* Storage;
 };
 
-#define TILE_PER_SIDE 8
+#define SQUARE_PER_SIDE 8
 
 enum chess_piece_type
 {
@@ -70,6 +117,8 @@ enum chess_piece_color
 {
 	ChessPieceColor_White,
 	ChessPieceColor_Black,
+
+	ChessPieceColor_Count,
 };
 
 struct chess_piece
@@ -86,7 +135,10 @@ struct game_state
 	camera Camera;
 	memory_arena GameArena;
 
-	board_tile Chessboard[TILE_PER_SIDE * TILE_PER_SIDE];
+	u32 SquareSizeInPixels;
+
+	board_tile Chessboard[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
+	bitmap PieceBitmaps[ChessPieceType_Count * ChessPieceColor_Count];
 
 	bool IsInitialised;
 };
@@ -201,9 +253,9 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 internal void
 DisplayChessboardToConsole(board_tile* Chessboard)
 {
-	for(s32 LineIndex = TILE_PER_SIDE - 1; LineIndex >= 0; --LineIndex)
+	for(s32 LineIndex = SQUARE_PER_SIDE - 1; LineIndex >= 0; --LineIndex)
 	{
-		for(u32 RowIndex = 0; RowIndex < TILE_PER_SIDE; ++RowIndex)
+		for(u32 RowIndex = 0; RowIndex < SQUARE_PER_SIDE; ++RowIndex)
 		{
 			chess_piece* Piece = Chessboard[RowIndex + 8 * LineIndex];
 			if(Piece)
@@ -288,6 +340,31 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 	}
 }
 
+internal bitmap 
+GetChessPieceBitmap(game_state* GameState, chess_piece Piece)
+{
+	bitmap Result = GameState->PieceBitmaps[Piece.Color * ChessPieceType_Count + Piece.Type];
+
+	return(Result);
+}
+internal void
+LoadPieceBitmaps(bitmap* Bitmaps)
+{
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Pawn] = LoadBitmap("../data/WhitePawn.png");
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Knight] = LoadBitmap("../data/WhiteKnight.png");
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Bishop] = LoadBitmap("../data/WhiteBishop.png");
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Rook] = LoadBitmap("../data/WhiteRook.png");
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Queen] = LoadBitmap("../data/WhiteQueen.png");
+	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_King] = LoadBitmap("../data/WhiteKing.png");
+
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Pawn] = LoadBitmap("../data/BlackPawn.png");
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Knight] = LoadBitmap("../data/BlackKnight.png");
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Bishop] = LoadBitmap("../data/BlackBishop.png");
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Rook] = LoadBitmap("../data/BlackRook.png");
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Queen] = LoadBitmap("../data/BlackQueen.png");
+	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_King] = LoadBitmap("../data/BlackKing.png");
+}
+
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
 internal void
 GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
@@ -300,17 +377,17 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		Assert(sizeof(game_state) + RenderArenaSize <= GameMemory->StorageSize);
 		void* RenderArenaMemoryBase = (u8*)GameMemory->Storage + sizeof(game_state);
 
-		// TODO(hugo) : WHY 1/10 ?
-		float PixelsToMeters = 1.0f / 10.0f;
-
 		// TODO(hugo) : Resizable window
 		InitialiseRenderer(&GameState->Renderer, SDLRenderer, RenderArenaSize,
-				V2(GlobalWindowWidth, GlobalWindowHeight), &GameState->Camera, PixelsToMeters, RenderArenaMemoryBase);
+				V2(GlobalWindowWidth, GlobalWindowHeight), &GameState->Camera, RenderArenaMemoryBase);
 
 		u64 GameArenaSize = Megabytes(128);
 		void* GameArenaMemoryBase = (u8*)GameMemory->Storage + sizeof(game_state) + RenderArenaSize;
 		InitialiseArena(&GameState->GameArena, GameArenaSize, GameArenaMemoryBase);
 		InitialiseChessboard(GameState->Chessboard, &GameState->GameArena);
+
+		GameState->SquareSizeInPixels = 64;
+		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
 		DisplayChessboardToConsole(GameState->Chessboard);
 
@@ -325,25 +402,42 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 	BeginUI(Renderer);
 
-	const u32 BoardSizeInPixels = 512;
+	// NOTE(hugo) : Render background
+	// {
+	u32 BoardSizeInPixels = 8 * GameState->SquareSizeInPixels;
 	v2 BoardSize = V2(BoardSizeInPixels, BoardSizeInPixels);
 	v2 BoardMin = 0.5f * V2(GlobalWindowWidth, GlobalWindowHeight) - 0.5f * BoardSize;
 	rect2 BoardRect = RectFromMinSize(BoardMin, BoardSize);
 
-	u32 TileSizeInPixels = (u32)(BoardSizeInPixels / TILE_PER_SIDE);
-	v2i TileSize = V2i(TileSizeInPixels, TileSizeInPixels);
+	u32 SquareSizeInPixels = (u32)(BoardSizeInPixels / SQUARE_PER_SIDE);
+	v2i SquareSize = V2i(SquareSizeInPixels, SquareSizeInPixels);
 
-	for(u32 TileY = 0; TileY < TILE_PER_SIDE; ++TileY)
+	for(u32 SquareY = 0; SquareY < SQUARE_PER_SIDE; ++SquareY)
 	{
-		for(u32 TileX = 0; TileX < TILE_PER_SIDE; ++TileX)
+		for(u32 SquareX = 0; SquareX < SQUARE_PER_SIDE; ++SquareX)
 		{
-			v2 TileMin = Hadamard(V2(TileX, TileY), V2(TileSize)) + BoardMin;
-			rect2 TileRect = RectFromMinSize(TileMin, V2(TileSize));
-			bool IsWhiteTile = (TileX + TileY) % 2 == 0;
-			v4 TileBackgroundColor = (IsWhiteTile) ? V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
-			PushRect(Renderer, TileRect, TileBackgroundColor);
+			v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
+			rect2 SquareRect = RectFromMinSize(SquareMin, V2(SquareSize));
+			bool IsWhiteTile = (SquareX + SquareY) % 2 == 0;
+			v4 SquareBackgroundColor = (IsWhiteTile) ? 
+				V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
+			PushRect(Renderer, SquareRect, SquareBackgroundColor);
+
+			// NOTE(hugo) : Draw the possible piece
+			chess_piece* Piece = GameState->Chessboard[SquareX + 8 * SquareY];
+			if(Piece)
+			{
+				v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
+				bitmap PieceBitmap = GetChessPieceBitmap(GameState, *Piece);
+				if(PieceBitmap.IsValid)
+				{
+					PushBitmap(&GameState->Renderer, PieceBitmap, SquareMin);
+				}
+			}
 		}
 	}
+	// }
+
 
 	EndUI(Renderer);
 

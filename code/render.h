@@ -15,10 +15,10 @@ enum render_command_type
 	RenderCommand_RectBorder,
 	RenderCommand_Clear,
 	RenderCommand_Hex,
+	RenderCommand_Bitmap,
 #if 0
 	RenderCommand_Circle,
 	RenderCommand_Text,
-	RenderCommand_Bitmap,
 #endif
 
 	RenderCommand_Count,
@@ -74,13 +74,11 @@ struct render_command
 			float InitialAngle;
 			v4 HexColor;
 		};
-#if 0
 		struct // NOTE(hugo) : RenderCommand_Bitmap
 		{
 			v2 Pos; // TODO(hugo) : Still shit because of anonymous struct... *sigh*
 			bitmap Bitmap;
 		};
-#endif
 	};
 };
 
@@ -129,7 +127,5 @@ struct renderer
 	void* CachedData[16];
 	SDL_Texture* CachedTextures[16];
 	u32 CacheCount;
-
-	float PixelsToMeters;
 };
 

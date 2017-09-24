@@ -2,7 +2,7 @@
 
 // TODO(hugo) : Parameter order is shit.
 void InitialiseRenderer(renderer* Renderer, SDL_Renderer* SDLRenderer, u32 RenderArenaSize,
-		v2 WindowSizeInPixels, camera* Camera, float PixelsToMeters, void* BaseMemory)
+		v2 WindowSizeInPixels, camera* Camera, void* BaseMemory)
 {
 	InitialiseArena(&Renderer->Arena, RenderArenaSize, BaseMemory);
 	Renderer->CommandCount = 0;
@@ -14,8 +14,6 @@ void InitialiseRenderer(renderer* Renderer, SDL_Renderer* SDLRenderer, u32 Rende
 	Renderer->Camera = Camera;
 
 	Renderer->Mode = RenderMode_None;
-
-	Renderer->PixelsToMeters = PixelsToMeters;
 }
 
 void BeginUI(renderer* Renderer)
@@ -191,47 +189,11 @@ void Render(renderer* Renderer)
 					SDLSetRenderColor(Renderer->SDLContext, Command->ClearColor);
 					SDL_RenderClear(Renderer->SDLContext);
 				} break;
-
-#if 0
-			case RenderCommand_Hex:
-				{
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						Command->Radius = (Renderer->Camera->FocalLength * Command->Radius) / Renderer->Camera->P.z;
-						Command->Center = Projection(Renderer, Command->Center);
-					}
-					SDLDrawHexagon(Renderer->SDLContext, 
-							SwitchBetweenWindowRenderCoords(Renderer, Command->Center), 
-							Command->Radius, Command->HexColor, Command->InitialAngle);
-				} break;
-
-			case RenderCommand_Circle:
-				{
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						Command->Circle.Radius = (Renderer->Camera->FocalLength * Command->Circle.Radius) / (Renderer->Camera->P.z);
-						Command->Circle.P = Projection(Renderer, Command->Circle.P);
-					}
-
-					Command->Circle.P = SwitchBetweenWindowRenderCoords(Renderer, Command->Circle.P);
-
-					SDLDrawCircle(Renderer->SDLContext, Command->Circle, Command->CircleColor);
-				} break;
-
-			case RenderCommand_Text:
-				{
-					v2 TextP = Command->P;
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						TextP = Projection(Renderer, TextP);
-					}
-					DrawText(Renderer->SDLContext, Command->Text, SwitchBetweenWindowRenderCoords(Renderer, TextP), Command->Font, Command->TextColor);
-				} break;
 			case RenderCommand_Bitmap:
 				{
 					Assert(Command->Bitmap.IsValid);
 
-					v2 BitmapSize = Renderer->PixelsToMeters * V2(Command->Bitmap.Width, Command->Bitmap.Height);
+					v2 BitmapSize = V2(Command->Bitmap.Width, Command->Bitmap.Height);
 					v2 OffsetP = Hadamard(Command->Bitmap.Offset, BitmapSize);
 					rect2 DestRect = RectFromMinSize(Command->Pos - OffsetP, BitmapSize);
 
@@ -271,6 +233,41 @@ void Render(renderer* Renderer)
 					SDL_RenderCopy(Renderer->SDLContext, BitmapTexture,
 							0, &SDLDestRect);
 
+				} break;
+#if 0
+			case RenderCommand_Hex:
+				{
+					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
+					{
+						Command->Radius = (Renderer->Camera->FocalLength * Command->Radius) / Renderer->Camera->P.z;
+						Command->Center = Projection(Renderer, Command->Center);
+					}
+					SDLDrawHexagon(Renderer->SDLContext, 
+							SwitchBetweenWindowRenderCoords(Renderer, Command->Center), 
+							Command->Radius, Command->HexColor, Command->InitialAngle);
+				} break;
+
+			case RenderCommand_Circle:
+				{
+					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
+					{
+						Command->Circle.Radius = (Renderer->Camera->FocalLength * Command->Circle.Radius) / (Renderer->Camera->P.z);
+						Command->Circle.P = Projection(Renderer, Command->Circle.P);
+					}
+
+					Command->Circle.P = SwitchBetweenWindowRenderCoords(Renderer, Command->Circle.P);
+
+					SDLDrawCircle(Renderer->SDLContext, Command->Circle, Command->CircleColor);
+				} break;
+
+			case RenderCommand_Text:
+				{
+					v2 TextP = Command->P;
+					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
+					{
+						TextP = Projection(Renderer, TextP);
+					}
+					DrawText(Renderer->SDLContext, Command->Text, SwitchBetweenWindowRenderCoords(Renderer, TextP), Command->Font, Command->TextColor);
 				} break;
 #endif
 
@@ -336,6 +333,22 @@ void PushClear(renderer* Renderer, v4 Color)
 	PushCommand(Renderer, Command);
 }
 
+internal void 
+PushBitmap(renderer* Renderer, bitmap Bitmap, v2 P)
+{
+	render_command Command = {};
+	Command.Type = RenderCommand_Bitmap;
+	Command.Pos = P;
+	Command.Bitmap = Bitmap;
+
+	if(Renderer->Mode == RenderMode_UI)
+	{
+		AddFlags(&Command, RenderCommandFlag_UI);
+	}
+
+	PushCommand(Renderer, Command);
+}
+
 #if 0
 void PushText(renderer* Renderer, v2 P, char* Text, TTF_Font* Font, v4 Color = V4(0.0f, 0.0f, 0.0f, 1.0f))
 {
@@ -387,18 +400,4 @@ void PushCircle(renderer* Renderer, v2 Center, float Radius, v4 Color)
 	PushCommand(Renderer, Command);
 }
 
-void PushBitmap(renderer* Renderer, bitmap Bitmap, v2 P)
-{
-	render_command Command = {};
-	Command.Type = RenderCommand_Bitmap;
-	Command.Pos = P;
-	Command.Bitmap = Bitmap;
-
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
-	PushCommand(Renderer, Command);
-}
 #endif
