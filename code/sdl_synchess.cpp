@@ -101,30 +101,30 @@ struct game_memory
 
 #define SQUARE_PER_SIDE 8
 
-enum chess_piece_type
+enum piece_type
 {
-	ChessPieceType_Pawn,
-	ChessPieceType_Knight,
-	ChessPieceType_Bishop,
-	ChessPieceType_Rook,
-	ChessPieceType_Queen,
-	ChessPieceType_King,
+	PieceType_Pawn,
+	PieceType_Knight,
+	PieceType_Bishop,
+	PieceType_Rook,
+	PieceType_Queen,
+	PieceType_King,
 
-	ChessPieceType_Count,
+	PieceType_Count,
 };
 
-enum chess_piece_color
+enum piece_color
 {
-	ChessPieceColor_White,
-	ChessPieceColor_Black,
+	PieceColor_White,
+	PieceColor_Black,
 
-	ChessPieceColor_Count,
+	PieceColor_Count,
 };
 
 struct chess_piece
 {
-	chess_piece_type Type;
-	chess_piece_color Color;
+	piece_type Type;
+	piece_color Color;
 };
 
 typedef chess_piece* board_tile;
@@ -138,7 +138,9 @@ struct game_state
 	u32 SquareSizeInPixels;
 
 	board_tile Chessboard[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
-	bitmap PieceBitmaps[ChessPieceType_Count * ChessPieceColor_Count];
+	bool IsTileHighlighted[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
+	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
+	v2i ClickedTile;
 
 	bool IsInitialised;
 };
@@ -171,82 +173,82 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 {
 	// NOTE(hugo) : White setup
 	Chessboard[0 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[0 + 8 * 0]->Type = ChessPieceType_Rook;
-	Chessboard[0 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[0 + 8 * 0]->Type = PieceType_Rook;
+	Chessboard[0 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[1 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[1 + 8 * 0]->Type = ChessPieceType_Knight;
-	Chessboard[1 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[1 + 8 * 0]->Type = PieceType_Knight;
+	Chessboard[1 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[2 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[2 + 8 * 0]->Type = ChessPieceType_Bishop;
-	Chessboard[2 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[2 + 8 * 0]->Type = PieceType_Bishop;
+	Chessboard[2 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[3 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[3 + 8 * 0]->Type = ChessPieceType_Queen;
-	Chessboard[3 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[3 + 8 * 0]->Type = PieceType_Queen;
+	Chessboard[3 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[4 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[4 + 8 * 0]->Type = ChessPieceType_King;
-	Chessboard[4 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[4 + 8 * 0]->Type = PieceType_King;
+	Chessboard[4 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[5 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[5 + 8 * 0]->Type = ChessPieceType_Bishop;
-	Chessboard[5 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[5 + 8 * 0]->Type = PieceType_Bishop;
+	Chessboard[5 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[6 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[6 + 8 * 0]->Type = ChessPieceType_Knight;
-	Chessboard[6 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[6 + 8 * 0]->Type = PieceType_Knight;
+	Chessboard[6 + 8 * 0]->Color = PieceColor_White;
 
 	Chessboard[7 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[7 + 8 * 0]->Type = ChessPieceType_Rook;
-	Chessboard[7 + 8 * 0]->Color = ChessPieceColor_White;
+	Chessboard[7 + 8 * 0]->Type = PieceType_Rook;
+	Chessboard[7 + 8 * 0]->Color = PieceColor_White;
 
 	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
 	{
 		Chessboard[RowIndex + 8 * 1] = PushStruct(GameArena, chess_piece);
-		Chessboard[RowIndex + 8 * 1]->Type = ChessPieceType_Pawn;
-		Chessboard[RowIndex + 8 * 1]->Color = ChessPieceColor_White;
+		Chessboard[RowIndex + 8 * 1]->Type = PieceType_Pawn;
+		Chessboard[RowIndex + 8 * 1]->Color = PieceColor_White;
 	}
 
 	// NOTE(hugo) : Black setup
 	Chessboard[0 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[0 + 8 * 7]->Type = ChessPieceType_Rook;
-	Chessboard[0 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[0 + 8 * 7]->Type = PieceType_Rook;
+	Chessboard[0 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[1 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[1 + 8 * 7]->Type = ChessPieceType_Knight;
-	Chessboard[1 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[1 + 8 * 7]->Type = PieceType_Knight;
+	Chessboard[1 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[2 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[2 + 8 * 7]->Type = ChessPieceType_Bishop;
-	Chessboard[2 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[2 + 8 * 7]->Type = PieceType_Bishop;
+	Chessboard[2 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[3 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[3 + 8 * 7]->Type = ChessPieceType_Queen;
-	Chessboard[3 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[3 + 8 * 7]->Type = PieceType_Queen;
+	Chessboard[3 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[4 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[4 + 8 * 7]->Type = ChessPieceType_King;
-	Chessboard[4 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[4 + 8 * 7]->Type = PieceType_King;
+	Chessboard[4 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[5 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[5 + 8 * 7]->Type = ChessPieceType_Bishop;
-	Chessboard[5 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[5 + 8 * 7]->Type = PieceType_Bishop;
+	Chessboard[5 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[6 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[6 + 8 * 7]->Type = ChessPieceType_Knight;
-	Chessboard[6 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[6 + 8 * 7]->Type = PieceType_Knight;
+	Chessboard[6 + 8 * 7]->Color = PieceColor_Black;
 
 	Chessboard[7 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[7 + 8 * 7]->Type = ChessPieceType_Rook;
-	Chessboard[7 + 8 * 7]->Color = ChessPieceColor_Black;
+	Chessboard[7 + 8 * 7]->Type = PieceType_Rook;
+	Chessboard[7 + 8 * 7]->Color = PieceColor_Black;
 
 	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
 	{
 		Chessboard[RowIndex + 8 * 6] = PushStruct(GameArena, chess_piece);
-		Chessboard[RowIndex + 8 * 6]->Type = ChessPieceType_Pawn;
-		Chessboard[RowIndex + 8 * 6]->Color = ChessPieceColor_Black;
+		Chessboard[RowIndex + 8 * 6]->Type = PieceType_Pawn;
+		Chessboard[RowIndex + 8 * 6]->Color = PieceColor_Black;
 	}
 }
 
@@ -262,9 +264,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 			{
 				switch(Piece->Type)
 				{
-					case ChessPieceType_Pawn:
+					case PieceType_Pawn:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("p");
 							}
@@ -273,9 +275,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 								printf("P");
 							}
 						} break;
-					case ChessPieceType_Knight:
+					case PieceType_Knight:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("n");
 							}
@@ -284,9 +286,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 								printf("N");
 							}
 						} break;
-					case ChessPieceType_Bishop:
+					case PieceType_Bishop:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("b");
 							}
@@ -295,9 +297,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 								printf("B");
 							}
 						} break;
-					case ChessPieceType_Rook:
+					case PieceType_Rook:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("r");
 							}
@@ -306,9 +308,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 								printf("R");
 							}
 						} break;
-					case ChessPieceType_Queen:
+					case PieceType_Queen:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("q");
 							}
@@ -317,9 +319,9 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 								printf("Q");
 							}
 						} break;
-					case ChessPieceType_King:
+					case PieceType_King:
 						{
-							if(Piece->Color == ChessPieceColor_White)
+							if(Piece->Color == PieceColor_White)
 							{
 								printf("k");
 							}
@@ -340,29 +342,218 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 	}
 }
 
-internal bitmap 
-GetChessPieceBitmap(game_state* GameState, chess_piece Piece)
+internal bool
+ContainsPiece(board_tile* Chessboard, v2i TileP)
 {
-	bitmap Result = GameState->PieceBitmaps[Piece.Color * ChessPieceType_Count + Piece.Type];
+	chess_piece* Piece = Chessboard[TileP.x + SQUARE_PER_SIDE * TileP.y];
+	bool Result = (Piece != 0);
+	return(Result);
+}
+
+internal bool
+ContainsPieceOfColor(board_tile* Chessboard, v2i TileP, piece_color Color)
+{
+	chess_piece* Piece = Chessboard[TileP.x + SQUARE_PER_SIDE * TileP.y];
+	bool Result = (Piece != 0) && (Piece->Color == Color);
+	return(Result);
+}
+
+internal void
+ClearTileHighlighted(game_state* GameState)
+{
+	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->IsTileHighlighted); ++TileIndex)
+	{
+		GameState->IsTileHighlighted[TileIndex] = false;
+	}
+}
+
+internal bool
+IsInsideBoard(v2i TileP)
+{
+	bool Result = (TileP.x >= 0) && (TileP.x < SQUARE_PER_SIDE)
+		&& (TileP.y >= 0) && (TileP.y < SQUARE_PER_SIDE);
+	return(Result);
+}
+
+internal void
+HighlightTile(game_state* GameState, v2i TileP)
+{
+	GameState->IsTileHighlighted[TileP.x + SQUARE_PER_SIDE * TileP.y] = true;
+}
+
+#define HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P)\
+	if(IsInsideBoard(P) && (!ContainsPiece(GameState->Chessboard, P))) \
+	{\
+			HighlightTile(GameState, P);\
+	}
+
+#define HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, Color)\
+	if(IsInsideBoard(P) && (ContainsPieceOfColor(GameState->Chessboard, (P), (Color)))) \
+	{\
+			HighlightTile(GameState, P);\
+	}
+
+#define HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Color)\
+	if(IsInsideBoard(P) && (!ContainsPieceOfColor(GameState->Chessboard, (P), (Color)))) \
+	{\
+			HighlightTile(GameState, P);\
+	}
+
+internal void
+HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
+{
+	Assert(Piece);
+	switch(Piece->Type)
+	{
+		case PieceType_Pawn:
+		{
+			if(Piece->Color == PieceColor_White)
+			{
+				v2i P = V2i(PieceP.x, PieceP.y + 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+
+				P = V2i(PieceP.x - 1, PieceP.y + 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+
+				P = V2i(PieceP.x + 1, PieceP.y + 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+
+				if(PieceP.y == 1)
+				{
+					P = V2i(PieceP.x, PieceP.y + 2);
+					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+				}
+			}
+			else if(Piece->Color == PieceColor_Black)
+			{
+				v2i P = V2i(PieceP.x, PieceP.y - 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+
+				P = V2i(PieceP.x - 1, PieceP.y - 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+
+				P = V2i(PieceP.x + 1, PieceP.y - 1);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+
+				if(PieceP.y == 6)
+				{
+					P = V2i(PieceP.x, PieceP.y - 2);
+					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+				}
+			}
+			else
+			{
+				InvalidCodePath;
+			}
+		} break;
+
+		case PieceType_Knight:
+		{
+			v2i P = V2i(PieceP.x - 1, PieceP.y + 2);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 1, PieceP.y + 2);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 2, PieceP.y + 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 2, PieceP.y - 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 1, PieceP.y - 2);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x - 1, PieceP.y - 2);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x - 2, PieceP.y - 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x - 2, PieceP.y + 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+		} break;
+
+		case PieceType_Bishop:
+		{
+		} break;
+
+		case PieceType_Rook:
+		{
+		} break;
+
+		case PieceType_Queen:
+		{
+		} break;
+
+		case PieceType_King:
+		{
+			v2i P = V2i(PieceP.x - 1, PieceP.y - 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x - 1, PieceP.y + 0);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x - 1, PieceP.y + 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 0, PieceP.y - 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 0, PieceP.y + 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 1, PieceP.y - 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 1, PieceP.y + 0);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			P = V2i(PieceP.x + 1, PieceP.y + 1);
+			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+		} break;
+
+		InvalidDefaultCase;
+	}
+}
+
+internal bitmap 
+GetPieceBitmap(game_state* GameState, chess_piece Piece)
+{
+	bitmap Result = GameState->PieceBitmaps[Piece.Color * PieceType_Count + Piece.Type];
 
 	return(Result);
 }
+
 internal void
 LoadPieceBitmaps(bitmap* Bitmaps)
 {
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Pawn] = LoadBitmap("../data/WhitePawn.png");
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Knight] = LoadBitmap("../data/WhiteKnight.png");
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Bishop] = LoadBitmap("../data/WhiteBishop.png");
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Rook] = LoadBitmap("../data/WhiteRook.png");
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_Queen] = LoadBitmap("../data/WhiteQueen.png");
-	Bitmaps[ChessPieceColor_White * ChessPieceType_Count + ChessPieceType_King] = LoadBitmap("../data/WhiteKing.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_Pawn] = LoadBitmap("../data/WhitePawn.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_Knight] = LoadBitmap("../data/WhiteKnight.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_Bishop] = LoadBitmap("../data/WhiteBishop.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_Rook] = LoadBitmap("../data/WhiteRook.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_Queen] = LoadBitmap("../data/WhiteQueen.png");
+	Bitmaps[PieceColor_White * PieceType_Count + PieceType_King] = LoadBitmap("../data/WhiteKing.png");
 
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Pawn] = LoadBitmap("../data/BlackPawn.png");
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Knight] = LoadBitmap("../data/BlackKnight.png");
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Bishop] = LoadBitmap("../data/BlackBishop.png");
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Rook] = LoadBitmap("../data/BlackRook.png");
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_Queen] = LoadBitmap("../data/BlackQueen.png");
-	Bitmaps[ChessPieceColor_Black * ChessPieceType_Count + ChessPieceType_King] = LoadBitmap("../data/BlackKing.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_Pawn] = LoadBitmap("../data/BlackPawn.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_Knight] = LoadBitmap("../data/BlackKnight.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_Bishop] = LoadBitmap("../data/BlackBishop.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_Rook] = LoadBitmap("../data/BlackRook.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_Queen] = LoadBitmap("../data/BlackQueen.png");
+	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_King] = LoadBitmap("../data/BlackKing.png");
+}
+
+v2i GetClickedTile(board_tile* Chessboard, v2 MouseP)
+{
+	v2i Result = V2i(0, 0);
+	v2 TileP = MouseP / (GlobalWindowHeight / 8);
+	TileP.y = 8 - TileP.y;
+
+	Result.x = u32(TileP.x);
+	Result.y = u32(TileP.y);
+
+	return(Result);
 }
 
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
@@ -394,6 +585,24 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		GameState->IsInitialised = true;
 	}
 
+	// NOTE(hugo) : Game update
+	// {
+	if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+	{
+		GameState->ClickedTile = GetClickedTile(GameState->Chessboard, Input->Mouse.P);
+		chess_piece* Piece = GameState->Chessboard[GameState->ClickedTile.x + SQUARE_PER_SIDE * GameState->ClickedTile.y];
+		if(Piece)
+		{
+			ClearTileHighlighted(GameState);
+			HighlightPossibleMoves(GameState, Piece, GameState->ClickedTile);
+		}
+	}
+	if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
+	{
+		ClearTileHighlighted(GameState);
+	}
+	// }
+
 	renderer* Renderer = &GameState->Renderer;
 
 	BeginRender(Renderer);
@@ -421,6 +630,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			bool IsWhiteTile = (SquareX + SquareY) % 2 == 0;
 			v4 SquareBackgroundColor = (IsWhiteTile) ? 
 				V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
+
+			if(GameState->IsTileHighlighted[SquareX + SQUARE_PER_SIDE * SquareY])
+			{
+				SquareBackgroundColor = V4(0.0f, 1.0f, 1.0f, 1.0f);
+			}
+
 			PushRect(Renderer, SquareRect, SquareBackgroundColor);
 
 			// NOTE(hugo) : Draw the possible piece
@@ -428,7 +643,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			if(Piece)
 			{
 				v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
-				bitmap PieceBitmap = GetChessPieceBitmap(GameState, *Piece);
+				bitmap PieceBitmap = GetPieceBitmap(GameState, *Piece);
 				if(PieceBitmap.IsValid)
 				{
 					PushBitmap(&GameState->Renderer, PieceBitmap, SquareMin);
