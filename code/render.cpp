@@ -2,31 +2,13 @@
 
 // TODO(hugo) : Parameter order is shit.
 void InitialiseRenderer(renderer* Renderer, SDL_Renderer* SDLRenderer, u32 RenderArenaSize,
-		v2 WindowSizeInPixels, camera* Camera, void* BaseMemory)
+		v2 WindowSizeInPixels, void* BaseMemory)
 {
 	InitialiseArena(&Renderer->Arena, RenderArenaSize, BaseMemory);
 	Renderer->CommandCount = 0;
 	Renderer->TemporaryMemory = {};
 	Renderer->SDLContext = SDLRenderer;
 	Renderer->WindowSizeInPixels = WindowSizeInPixels;
-
-	Assert(Camera);
-	Renderer->Camera = Camera;
-
-	Renderer->Mode = RenderMode_None;
-}
-
-void BeginUI(renderer* Renderer)
-{
-	Assert(Renderer->Mode != RenderMode_UI);
-	Renderer->Mode = RenderMode_UI;
-}
-
-void EndUI(renderer* Renderer)
-{
-	Assert(Renderer->Mode == RenderMode_UI);
-	// TODO(hugo) : We could go back to the previous mode instead of the none mode ?
-	Renderer->Mode = RenderMode_None;
 }
 
 void FlushCommands(renderer* Renderer)
@@ -75,27 +57,6 @@ v2 SwitchBetweenWindowRenderCoords(renderer* Renderer, v2 P)
 	return(Result);
 }
 
-v2 Projection(renderer* Renderer, v2 P)
-{
-	camera* Camera = Renderer->Camera;
-
-	v2 PosCamSpace = P - Camera->P.xy;
-	v2 Result = (Camera->FocalLength / Camera->P.z) * PosCamSpace;
-
-	Result += 0.5f * Renderer->WindowSizeInPixels;
-
-	return(Result);
-}
-
-rect2 Projection(renderer* Renderer, rect2 R)
-{
-	rect2 Result = {};
-	Result.Min = Projection(Renderer, R.Min);
-	Result.Max = Projection(Renderer, R.Max);
-
-	return(Result);
-}
-
 SDL_Texture* FindTextureInCache(renderer* Renderer, void* Data)
 {
 	SDL_Texture* Found = 0;
@@ -133,15 +94,6 @@ void Render(renderer* Renderer)
 			case RenderCommand_Rect:
 				{
 					rect2 DrawRect = Command->Rect;
-					if(FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						v2 CommandRectSize = RectSize(Command->Rect);
-					}
-					else
-					{
-						DrawRect = Projection(Renderer, Command->Rect);
-					}
-
 					SDL_Rect CommandRect = SDLRect(DrawRect);
 					CommandRect.y = Renderer->WindowSizeInPixels.y - CommandRect.y;
 
@@ -154,11 +106,6 @@ void Render(renderer* Renderer)
 					v2 Begin = Command->Begin;
 					v2 End = Command->End;
 
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						Begin = Projection(Renderer, Begin);
-						End = Projection(Renderer, End);
-					}
 					SDLSetRenderColor(Renderer->SDLContext, Command->LineColor);
 					SDL_RenderDrawLine(Renderer->SDLContext, 
 							Begin.x, Renderer->WindowSizeInPixels.y - Begin.y,
@@ -168,15 +115,6 @@ void Render(renderer* Renderer)
 			case RenderCommand_RectBorder:
 				{
 					rect2 DrawRect = Command->Rect;
-					if(FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						v2 CommandRectSize = RectSize(Command->Rect);
-					}
-					else
-					{
-						DrawRect = Projection(Renderer, Command->Rect);
-					}
-
 					SDL_Rect CommandRect = SDLRect(DrawRect);
 					CommandRect.y = Renderer->WindowSizeInPixels.y - CommandRect.y;
 
@@ -196,11 +134,6 @@ void Render(renderer* Renderer)
 					v2 BitmapSize = V2(Command->Bitmap.Width, Command->Bitmap.Height);
 					v2 OffsetP = Hadamard(Command->Bitmap.Offset, BitmapSize);
 					rect2 DestRect = RectFromMinSize(Command->Pos - OffsetP, BitmapSize);
-
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						DestRect = Projection(Renderer, DestRect);
-					}
 
 					u32 RedMask   = 0x000000FF;
 					u32 GreenMask = 0x0000FF00;
@@ -237,11 +170,6 @@ void Render(renderer* Renderer)
 #if 0
 			case RenderCommand_Hex:
 				{
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						Command->Radius = (Renderer->Camera->FocalLength * Command->Radius) / Renderer->Camera->P.z;
-						Command->Center = Projection(Renderer, Command->Center);
-					}
 					SDLDrawHexagon(Renderer->SDLContext, 
 							SwitchBetweenWindowRenderCoords(Renderer, Command->Center), 
 							Command->Radius, Command->HexColor, Command->InitialAngle);
@@ -249,12 +177,6 @@ void Render(renderer* Renderer)
 
 			case RenderCommand_Circle:
 				{
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						Command->Circle.Radius = (Renderer->Camera->FocalLength * Command->Circle.Radius) / (Renderer->Camera->P.z);
-						Command->Circle.P = Projection(Renderer, Command->Circle.P);
-					}
-
 					Command->Circle.P = SwitchBetweenWindowRenderCoords(Renderer, Command->Circle.P);
 
 					SDLDrawCircle(Renderer->SDLContext, Command->Circle, Command->CircleColor);
@@ -263,10 +185,6 @@ void Render(renderer* Renderer)
 			case RenderCommand_Text:
 				{
 					v2 TextP = Command->P;
-					if(!FlagSet(Command->Flags, RenderCommandFlag_UI))
-					{
-						TextP = Projection(Renderer, TextP);
-					}
 					DrawText(Renderer->SDLContext, Command->Text, SwitchBetweenWindowRenderCoords(Renderer, TextP), Command->Font, Command->TextColor);
 				} break;
 #endif
@@ -286,11 +204,6 @@ void PushLine(renderer* Renderer, v2 Begin, v2 End, v4 Color)
 	Command.End = End;
 	Command.LineColor = Color;
 
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
 	PushCommand(Renderer, Command);
 }
 
@@ -301,11 +214,6 @@ void PushRect(renderer* Renderer, rect2 Rect, v4 Color)
 	Command.Rect = Rect;
 	Command.Color = Color;
 
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
 	PushCommand(Renderer, Command);
 }
 
@@ -315,11 +223,6 @@ void PushRectBorder(renderer* Renderer, rect2 Rect, v4 Color)
 	Command.Type = RenderCommand_RectBorder;
 	Command.Rect = Rect;
 	Command.Color = Color;
-
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
 
 	PushCommand(Renderer, Command);
 }
@@ -341,11 +244,6 @@ PushBitmap(renderer* Renderer, bitmap Bitmap, v2 P)
 	Command.Pos = P;
 	Command.Bitmap = Bitmap;
 
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
 	PushCommand(Renderer, Command);
 }
 
@@ -359,11 +257,6 @@ void PushText(renderer* Renderer, v2 P, char* Text, TTF_Font* Font, v4 Color = V
 	Command.TextColor = Color;
 	Command.Font = Font;
 
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
 	PushCommand(Renderer, Command);
 }
 
@@ -376,11 +269,6 @@ void PushHex(renderer* Renderer, v2 Center, float Radius, v4 Color, float Initia
 	Command.HexColor = Color;
 	Command.InitialAngle = InitialAngle;
 
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
-
 	PushCommand(Renderer, Command);
 }
 
@@ -391,11 +279,6 @@ void PushCircle(renderer* Renderer, v2 Center, float Radius, v4 Color)
 	Command.Circle.P = Center;
 	Command.Circle.Radius = Radius;
 	Command.CircleColor = Color;
-
-	if(Renderer->Mode == RenderMode_UI)
-	{
-		AddFlags(&Command, RenderCommandFlag_UI);
-	}
 
 	PushCommand(Renderer, Command);
 }

@@ -12,17 +12,6 @@
 global_variable u32 GlobalWindowWidth = 512;
 global_variable u32 GlobalWindowHeight = 512;
 
-struct camera
-{
-	v3 P;
-#if 0
-	// NOTE(hugo) : No need for them for now since the camera direction is fixed
-	v3 XAxis;
-	v3 ZAxis;
-#endif
-	float FocalLength;
-};
-
 internal SDL_Rect
 SDLRect(rect2 Rect)
 {
@@ -132,7 +121,6 @@ typedef chess_piece* board_tile;
 struct game_state
 {
 	renderer Renderer;
-	camera Camera;
 	memory_arena GameArena;
 
 	u32 SquareSizeInPixels;
@@ -598,7 +586,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 		// TODO(hugo) : Resizable window
 		InitialiseRenderer(&GameState->Renderer, SDLRenderer, RenderArenaSize,
-				V2(GlobalWindowWidth, GlobalWindowHeight), &GameState->Camera, RenderArenaMemoryBase);
+				V2(GlobalWindowWidth, GlobalWindowHeight), RenderArenaMemoryBase);
 
 		u64 GameArenaSize = Megabytes(128);
 		void* GameArenaMemoryBase = (u8*)GameMemory->Storage + sizeof(game_state) + RenderArenaSize;
@@ -650,8 +638,6 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 	PushClear(Renderer, V4(0.0f, 0.0f, 0.0f, 1.0f));
 
-	BeginUI(Renderer);
-
 	// NOTE(hugo) : Render background
 	// {
 	u32 BoardSizeInPixels = 8 * GameState->SquareSizeInPixels;
@@ -693,10 +679,6 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		}
 	}
 	// }
-
-
-	EndUI(Renderer);
-
 
 	// NOTE(hugo): Render the commands
 	Render(Renderer);

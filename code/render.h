@@ -1,13 +1,5 @@
 #pragma once
 
-enum render_mode
-{
-	RenderMode_None,
-	RenderMode_UI,
-
-	RenderMode_Count,
-};
-
 enum render_command_type
 {
 	RenderCommand_Rect,
@@ -24,15 +16,9 @@ enum render_command_type
 	RenderCommand_Count,
 };
 
-enum render_command_flag
-{
-	RenderCommandFlag_UI = 1 << 0,
-};
-
 struct render_command
 {
 	render_command_type Type;
-	render_command_flag Flags;
 	union
 	{
 		struct // NOTE(hugo) : RenderCommand_Rect && RenderCommand_RectBorder
@@ -82,29 +68,6 @@ struct render_command
 	};
 };
 
-bool FlagSet(render_command_flag CommandFlags, render_command_flag Flag)
-{
-	bool Result = ((CommandFlags & Flag) == 1);
-
-	return(Result);
-}
-
-void AddFlags(render_command* Command, render_command_flag Flags)
-{
-	Assert(!FlagSet(Command->Flags, Flags));
-
-	// NOTE(hugo): Need to do a small hack because of the compiler :(
-	// Otherwise I would have done Command->Flags |= Flags
-	Command->Flags = (render_command_flag)(Command->Flags | Flags);
-}
-
-void DeleteFlags(render_command* Command, render_command_flag Flags)
-{
-	Assert(FlagSet(Command->Flags, Flags));
-
-	Command->Flags = (render_command_flag)(Command->Flags & (!Flags));
-}
-
 struct renderer
 {
 	u32 CommandCount;
@@ -113,10 +76,6 @@ struct renderer
 	SDL_Renderer* SDLContext;
 
 	v2 WindowSizeInPixels;
-
-	camera* Camera;
-
-	render_mode Mode;
 
 	// NOTE(hugo) : Caching to avoid 
 	// over computation of SDL_Texture
