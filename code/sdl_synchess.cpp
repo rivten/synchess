@@ -168,87 +168,45 @@ RGB8ToV4(rgb8 Color)
 	return(Result);
 }
 
+#define PLACE_PIECE_AT(I, J, TypeP, ColorP)\
+	Assert(!Chessboard[I + 8 * J]);\
+	Chessboard[I + 8 * J] = PushStruct(GameArena, chess_piece);\
+	Chessboard[I + 8 * J]->Type = PieceType_##TypeP;\
+	Chessboard[I + 8 * J]->Color = PieceColor_##ColorP;\
+
 internal void
 InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 {
 	// NOTE(hugo) : White setup
-	Chessboard[0 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[0 + 8 * 0]->Type = PieceType_Rook;
-	Chessboard[0 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[1 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[1 + 8 * 0]->Type = PieceType_Knight;
-	Chessboard[1 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[2 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[2 + 8 * 0]->Type = PieceType_Bishop;
-	Chessboard[2 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[3 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[3 + 8 * 0]->Type = PieceType_Queen;
-	Chessboard[3 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[4 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[4 + 8 * 0]->Type = PieceType_King;
-	Chessboard[4 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[5 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[5 + 8 * 0]->Type = PieceType_Bishop;
-	Chessboard[5 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[6 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[6 + 8 * 0]->Type = PieceType_Knight;
-	Chessboard[6 + 8 * 0]->Color = PieceColor_White;
-
-	Chessboard[7 + 8 * 0] = PushStruct(GameArena, chess_piece);
-	Chessboard[7 + 8 * 0]->Type = PieceType_Rook;
-	Chessboard[7 + 8 * 0]->Color = PieceColor_White;
+	PLACE_PIECE_AT(0, 0, Rook, White);
+	PLACE_PIECE_AT(1, 0, Knight, White);
+	PLACE_PIECE_AT(2, 0, Bishop, White);
+	PLACE_PIECE_AT(3, 0, Queen, White);
+	PLACE_PIECE_AT(4, 0, King, White);
+	PLACE_PIECE_AT(5, 0, Bishop, White);
+	PLACE_PIECE_AT(6, 0, Knight, White);
+	PLACE_PIECE_AT(7, 0, Rook, White);
 
 	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
 	{
-		Chessboard[RowIndex + 8 * 1] = PushStruct(GameArena, chess_piece);
-		Chessboard[RowIndex + 8 * 1]->Type = PieceType_Pawn;
-		Chessboard[RowIndex + 8 * 1]->Color = PieceColor_White;
+		PLACE_PIECE_AT(RowIndex, 1, Pawn, White);
 	}
 
+	PLACE_PIECE_AT(5, 5, Rook, White);
+
 	// NOTE(hugo) : Black setup
-	Chessboard[0 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[0 + 8 * 7]->Type = PieceType_Rook;
-	Chessboard[0 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[1 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[1 + 8 * 7]->Type = PieceType_Knight;
-	Chessboard[1 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[2 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[2 + 8 * 7]->Type = PieceType_Bishop;
-	Chessboard[2 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[3 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[3 + 8 * 7]->Type = PieceType_Queen;
-	Chessboard[3 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[4 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[4 + 8 * 7]->Type = PieceType_King;
-	Chessboard[4 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[5 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[5 + 8 * 7]->Type = PieceType_Bishop;
-	Chessboard[5 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[6 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[6 + 8 * 7]->Type = PieceType_Knight;
-	Chessboard[6 + 8 * 7]->Color = PieceColor_Black;
-
-	Chessboard[7 + 8 * 7] = PushStruct(GameArena, chess_piece);
-	Chessboard[7 + 8 * 7]->Type = PieceType_Rook;
-	Chessboard[7 + 8 * 7]->Color = PieceColor_Black;
+	PLACE_PIECE_AT(0, 7, Rook, Black);
+	PLACE_PIECE_AT(1, 7, Knight, Black);
+	PLACE_PIECE_AT(2, 7, Bishop, Black);
+	PLACE_PIECE_AT(3, 7, Queen, Black);
+	PLACE_PIECE_AT(4, 7, King, Black);
+	PLACE_PIECE_AT(5, 7, Bishop, Black);
+	PLACE_PIECE_AT(6, 7, Knight, Black);
+	PLACE_PIECE_AT(7, 7, Rook, Black);
 
 	for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
 	{
-		Chessboard[RowIndex + 8 * 6] = PushStruct(GameArena, chess_piece);
-		Chessboard[RowIndex + 8 * 6]->Type = PieceType_Pawn;
-		Chessboard[RowIndex + 8 * 6]->Color = PieceColor_Black;
+		PLACE_PIECE_AT(RowIndex, 6, Pawn, Black);
 	}
 }
 
@@ -399,6 +357,26 @@ HighlightTile(game_state* GameState, v2i TileP)
 			HighlightTile(GameState, P);\
 	}
 
+#define HIGHLIGHT_IN_DIR(PieceP, Dir)\
+	{\
+		u32 K = 1;\
+		while(IsInsideBoard(PieceP + K * Dir) && !ContainsPiece(GameState->Chessboard, PieceP + K * Dir))\
+		{\
+			HighlightTile(GameState, PieceP + K * Dir);\
+			++K;\
+		}\
+		if(IsInsideBoard(PieceP + K * Dir))\
+		{\
+			v2i BlockingPieceP = PieceP + K * Dir;\
+			chess_piece* BlockingPiece = GameState->Chessboard[BlockingPieceP.x + 8 * BlockingPieceP.y];\
+			Assert(BlockingPiece);\
+			if(BlockingPiece->Color != Piece->Color)\
+			{\
+				HighlightTile(GameState, BlockingPieceP);\
+			}\
+		}\
+	}
+
 internal void
 HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 {
@@ -418,7 +396,7 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 				P = V2i(PieceP.x + 1, PieceP.y + 1);
 				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
-				if(PieceP.y == 1)
+				if((PieceP.y == 1) && !ContainsPiece(GameState->Chessboard, V2i(PieceP.x, PieceP.y + 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y + 2);
 					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
@@ -435,7 +413,7 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 				P = V2i(PieceP.x + 1, PieceP.y - 1);
 				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
-				if(PieceP.y == 6)
+				if((PieceP.y == 6) && !ContainsPiece(GameState->Chessboard, V2i(PieceP.x, PieceP.y - 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y - 2);
 					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
@@ -477,14 +455,59 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 
 		case PieceType_Bishop:
 		{
+			v2i LeftTopDir = V2i(-1, +1);
+			HIGHLIGHT_IN_DIR(PieceP, LeftTopDir);
+
+			v2i RightTopDir = V2i(+1, +1);
+			HIGHLIGHT_IN_DIR(PieceP, RightTopDir);
+
+			v2i RightDownDir = V2i(+1, -1);
+			HIGHLIGHT_IN_DIR(PieceP, RightDownDir);
+
+			v2i LeftDownDir = V2i(-1, -1);
+			HIGHLIGHT_IN_DIR(PieceP, LeftDownDir);
 		} break;
 
 		case PieceType_Rook:
 		{
+			v2i LeftDir = V2i(-1, 0);
+			HIGHLIGHT_IN_DIR(PieceP, LeftDir);
+
+			v2i TopDir = V2i(0, +1);
+			HIGHLIGHT_IN_DIR(PieceP, TopDir);
+
+			v2i RightDir = V2i(+1, 0);
+			HIGHLIGHT_IN_DIR(PieceP, RightDir);
+
+			v2i DownDir = V2i(0, -1);
+			HIGHLIGHT_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_Queen:
 		{
+			v2i LeftTopDir = V2i(-1, +1);
+			HIGHLIGHT_IN_DIR(PieceP, LeftTopDir);
+
+			v2i RightTopDir = V2i(+1, +1);
+			HIGHLIGHT_IN_DIR(PieceP, RightTopDir);
+
+			v2i RightDownDir = V2i(+1, -1);
+			HIGHLIGHT_IN_DIR(PieceP, RightDownDir);
+
+			v2i LeftDownDir = V2i(-1, -1);
+			HIGHLIGHT_IN_DIR(PieceP, LeftDownDir);
+
+			v2i LeftDir = V2i(-1, 0);
+			HIGHLIGHT_IN_DIR(PieceP, LeftDir);
+
+			v2i TopDir = V2i(0, +1);
+			HIGHLIGHT_IN_DIR(PieceP, TopDir);
+
+			v2i RightDir = V2i(+1, 0);
+			HIGHLIGHT_IN_DIR(PieceP, RightDir);
+
+			v2i DownDir = V2i(0, -1);
+			HIGHLIGHT_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_King:
@@ -512,6 +535,8 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 
 			P = V2i(PieceP.x + 1, PieceP.y + 1);
 			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+
+			//TODO(hugo) : Roque
 		} break;
 
 		InvalidDefaultCase;
