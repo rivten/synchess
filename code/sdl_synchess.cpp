@@ -141,6 +141,7 @@ struct game_state
 	bool IsTileHighlighted[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
 	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
 	v2i ClickedTile;
+	v2i SelectedPieceP;
 
 	bool IsInitialised;
 };
@@ -308,10 +309,12 @@ ContainsPiece(board_tile* Chessboard, v2i TileP)
 	return(Result);
 }
 
+#define BOARD_COORD(P) (P).x + 8 * (P).y
+
 internal bool
 ContainsPieceOfColor(board_tile* Chessboard, v2i TileP, piece_color Color)
 {
-	chess_piece* Piece = Chessboard[TileP.x + SQUARE_PER_SIDE * TileP.y];
+	chess_piece* Piece = Chessboard[BOARD_COORD(TileP)];
 	bool Result = (Piece != 0) && (Piece->Color == Color);
 	return(Result);
 }
@@ -336,7 +339,7 @@ IsInsideBoard(v2i TileP)
 internal void
 HighlightTile(game_state* GameState, v2i TileP)
 {
-	GameState->IsTileHighlighted[TileP.x + SQUARE_PER_SIDE * TileP.y] = true;
+	GameState->IsTileHighlighted[BOARD_COORD(TileP)] = true;
 }
 
 #define HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P)\
@@ -408,10 +411,10 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 				HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
 
 				P = V2i(PieceP.x - 1, PieceP.y - 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
 				P = V2i(PieceP.x + 1, PieceP.y - 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
 				if((PieceP.y == 6) && !ContainsPiece(GameState->Chessboard, V2i(PieceP.x, PieceP.y - 1)))
 				{
@@ -615,11 +618,24 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
 	{
 		GameState->ClickedTile = GetClickedTile(GameState->Chessboard, Input->Mouse.P);
-		chess_piece* Piece = GameState->Chessboard[GameState->ClickedTile.x + SQUARE_PER_SIDE * GameState->ClickedTile.y];
+		chess_piece* Piece = GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)];
 		if(Piece)
 		{
 			ClearTileHighlighted(GameState);
 			HighlightPossibleMoves(GameState, Piece, GameState->ClickedTile);
+			GameState->SelectedPieceP = GameState->ClickedTile;
+		}
+		else
+		{
+			if(GameState->IsTileHighlighted[BOARD_COORD(GameState->ClickedTile)])
+			{
+				chess_piece* SelectedPiece = GameState->Chessboard[GameState->SelectedPieceP.x + 8 * GameState->SelectedPieceP.y];
+				Assert(SelectedPiece);
+				GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
+				GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+
+				ClearTileHighlighted(GameState);
+			}
 		}
 	}
 	if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
@@ -652,7 +668,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		{
 			v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
 			rect2 SquareRect = RectFromMinSize(SquareMin, V2(SquareSize));
-			bool IsWhiteTile = (SquareX + SquareY) % 2 == 0;
+			bool IsWhiteTile = (SquareX + SquareY) % 2 != 0;
 			v4 SquareBackgroundColor = (IsWhiteTile) ? 
 				V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
 
