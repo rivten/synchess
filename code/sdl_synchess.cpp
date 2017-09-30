@@ -88,51 +88,7 @@ struct game_memory
 	void* Storage;
 };
 
-#define SQUARE_PER_SIDE 8
-
-enum piece_type
-{
-	PieceType_Pawn,
-	PieceType_Knight,
-	PieceType_Bishop,
-	PieceType_Rook,
-	PieceType_Queen,
-	PieceType_King,
-
-	PieceType_Count,
-};
-
-enum piece_color
-{
-	PieceColor_White,
-	PieceColor_Black,
-
-	PieceColor_Count,
-};
-
-struct chess_piece
-{
-	piece_type Type;
-	piece_color Color;
-};
-
-typedef chess_piece* board_tile;
-
-struct game_state
-{
-	renderer Renderer;
-	memory_arena GameArena;
-
-	u32 SquareSizeInPixels;
-
-	board_tile Chessboard[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
-	bool IsTileHighlighted[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
-	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
-	v2i ClickedTile;
-	v2i SelectedPieceP;
-
-	bool IsInitialised;
-};
+#include "synchess.h"
 
 struct rgb8
 {
@@ -180,8 +136,6 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 	{
 		PLACE_PIECE_AT(RowIndex, 1, Pawn, White);
 	}
-
-	PLACE_PIECE_AT(5, 5, Rook, White);
 
 	// NOTE(hugo) : Black setup
 	PLACE_PIECE_AT(0, 7, Rook, Black);
@@ -325,52 +279,61 @@ IsInsideBoard(v2i TileP)
 }
 
 internal void
-HighlightTile(game_state* GameState, v2i TileP)
+AddTile(tile_list** Sentinel, v2i TileP, memory_arena* Arena)
 {
-	GameState->IsTileHighlighted[BOARD_COORD(TileP)] = true;
+	tile_list* TileToAdd = PushStruct(Arena, tile_list);
+	TileToAdd->P = TileP;
+	if(Sentinel)
+	{
+		TileToAdd->Next = (*Sentinel);
+	}
+	*Sentinel = TileToAdd;
 }
 
-#define HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P)\
-	if(IsInsideBoard(P) && (!ContainsPiece(GameState->Chessboard, P))) \
+#define ADD_IF_IN_BOARD_AND_NO_PIECE(P)\
+	if(IsInsideBoard(P) && (!ContainsPiece(Chessboard, P))) \
 	{\
-			HighlightTile(GameState, P);\
+			AddTile(&Sentinel, P, Arena);\
 	}
 
-#define HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, Color)\
-	if(IsInsideBoard(P) && (ContainsPieceOfColor(GameState->Chessboard, (P), (Color)))) \
+#define ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, Color)\
+	if(IsInsideBoard(P) && (ContainsPieceOfColor(Chessboard, (P), (Color)))) \
 	{\
-			HighlightTile(GameState, P);\
+			AddTile(&Sentinel, P, Arena);\
 	}
 
-#define HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Color)\
-	if(IsInsideBoard(P) && (!ContainsPieceOfColor(GameState->Chessboard, (P), (Color)))) \
+#define ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Color)\
+	if(IsInsideBoard(P) && (!ContainsPieceOfColor(Chessboard, (P), (Color)))) \
 	{\
-			HighlightTile(GameState, P);\
+			AddTile(&Sentinel, P, Arena);\
 	}
 
-#define HIGHLIGHT_IN_DIR(PieceP, Dir)\
+#define ADD_IN_DIR(PieceP, Dir)\
 	{\
 		u32 K = 1;\
-		while(IsInsideBoard(PieceP + K * Dir) && !ContainsPiece(GameState->Chessboard, PieceP + K * Dir))\
+		while(IsInsideBoard(PieceP + K * Dir) && !ContainsPiece(Chessboard, PieceP + K * Dir))\
 		{\
-			HighlightTile(GameState, PieceP + K * Dir);\
+			AddTile(&Sentinel, PieceP + K * Dir, Arena);\
 			++K;\
 		}\
 		if(IsInsideBoard(PieceP + K * Dir))\
 		{\
 			v2i BlockingPieceP = PieceP + K * Dir;\
-			chess_piece* BlockingPiece = GameState->Chessboard[BlockingPieceP.x + 8 * BlockingPieceP.y];\
+			chess_piece* BlockingPiece = Chessboard[BlockingPieceP.x + 8 * BlockingPieceP.y];\
 			Assert(BlockingPiece);\
 			if(BlockingPiece->Color != Piece->Color)\
 			{\
-				HighlightTile(GameState, BlockingPieceP);\
+				AddTile(&Sentinel, BlockingPieceP, Arena);\
 			}\
 		}\
 	}
 
-internal void
-HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
+internal tile_list*
+GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
+		v2i PieceP, memory_arena* Arena)
 {
+	tile_list* Sentinel = 0;
+
 	Assert(Piece);
 	switch(Piece->Type)
 	{
@@ -379,35 +342,35 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 			if(Piece->Color == PieceColor_White)
 			{
 				v2i P = V2i(PieceP.x, PieceP.y + 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+				ADD_IF_IN_BOARD_AND_NO_PIECE(P);
 
 				P = V2i(PieceP.x - 1, PieceP.y + 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
 				P = V2i(PieceP.x + 1, PieceP.y + 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
-				if((PieceP.y == 1) && !ContainsPiece(GameState->Chessboard, V2i(PieceP.x, PieceP.y + 1)))
+				if((PieceP.y == 1) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y + 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y + 2);
-					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+					ADD_IF_IN_BOARD_AND_NO_PIECE(P);
 				}
 			}
 			else if(Piece->Color == PieceColor_Black)
 			{
 				v2i P = V2i(PieceP.x, PieceP.y - 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+				ADD_IF_IN_BOARD_AND_NO_PIECE(P);
 
 				P = V2i(PieceP.x - 1, PieceP.y - 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
+				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
 				P = V2i(PieceP.x + 1, PieceP.y - 1);
-				HIGHLIGHT_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
+				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
-				if((PieceP.y == 6) && !ContainsPiece(GameState->Chessboard, V2i(PieceP.x, PieceP.y - 1)))
+				if((PieceP.y == 6) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y - 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y - 2);
-					HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE(P);
+					ADD_IF_IN_BOARD_AND_NO_PIECE(P);
 				}
 			}
 			else
@@ -419,118 +382,129 @@ HighlightPossibleMoves(game_state* GameState, chess_piece* Piece, v2i PieceP)
 		case PieceType_Knight:
 		{
 			v2i P = V2i(PieceP.x - 1, PieceP.y + 2);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 2);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 2, PieceP.y + 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 2, PieceP.y - 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y - 2);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y - 2);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 2, PieceP.y - 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 2, PieceP.y + 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 		} break;
 
 		case PieceType_Bishop:
 		{
 			v2i LeftTopDir = V2i(-1, +1);
-			HIGHLIGHT_IN_DIR(PieceP, LeftTopDir);
+			ADD_IN_DIR(PieceP, LeftTopDir);
 
 			v2i RightTopDir = V2i(+1, +1);
-			HIGHLIGHT_IN_DIR(PieceP, RightTopDir);
+			ADD_IN_DIR(PieceP, RightTopDir);
 
 			v2i RightDownDir = V2i(+1, -1);
-			HIGHLIGHT_IN_DIR(PieceP, RightDownDir);
+			ADD_IN_DIR(PieceP, RightDownDir);
 
 			v2i LeftDownDir = V2i(-1, -1);
-			HIGHLIGHT_IN_DIR(PieceP, LeftDownDir);
+			ADD_IN_DIR(PieceP, LeftDownDir);
 		} break;
 
 		case PieceType_Rook:
 		{
 			v2i LeftDir = V2i(-1, 0);
-			HIGHLIGHT_IN_DIR(PieceP, LeftDir);
+			ADD_IN_DIR(PieceP, LeftDir);
 
 			v2i TopDir = V2i(0, +1);
-			HIGHLIGHT_IN_DIR(PieceP, TopDir);
+			ADD_IN_DIR(PieceP, TopDir);
 
 			v2i RightDir = V2i(+1, 0);
-			HIGHLIGHT_IN_DIR(PieceP, RightDir);
+			ADD_IN_DIR(PieceP, RightDir);
 
 			v2i DownDir = V2i(0, -1);
-			HIGHLIGHT_IN_DIR(PieceP, DownDir);
+			ADD_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_Queen:
 		{
 			v2i LeftTopDir = V2i(-1, +1);
-			HIGHLIGHT_IN_DIR(PieceP, LeftTopDir);
+			ADD_IN_DIR(PieceP, LeftTopDir);
 
 			v2i RightTopDir = V2i(+1, +1);
-			HIGHLIGHT_IN_DIR(PieceP, RightTopDir);
+			ADD_IN_DIR(PieceP, RightTopDir);
 
 			v2i RightDownDir = V2i(+1, -1);
-			HIGHLIGHT_IN_DIR(PieceP, RightDownDir);
+			ADD_IN_DIR(PieceP, RightDownDir);
 
 			v2i LeftDownDir = V2i(-1, -1);
-			HIGHLIGHT_IN_DIR(PieceP, LeftDownDir);
+			ADD_IN_DIR(PieceP, LeftDownDir);
 
 			v2i LeftDir = V2i(-1, 0);
-			HIGHLIGHT_IN_DIR(PieceP, LeftDir);
+			ADD_IN_DIR(PieceP, LeftDir);
 
 			v2i TopDir = V2i(0, +1);
-			HIGHLIGHT_IN_DIR(PieceP, TopDir);
+			ADD_IN_DIR(PieceP, TopDir);
 
 			v2i RightDir = V2i(+1, 0);
-			HIGHLIGHT_IN_DIR(PieceP, RightDir);
+			ADD_IN_DIR(PieceP, RightDir);
 
 			v2i DownDir = V2i(0, -1);
-			HIGHLIGHT_IN_DIR(PieceP, DownDir);
+			ADD_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_King:
 		{
 			v2i P = V2i(PieceP.x - 1, PieceP.y - 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y + 0);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y + 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 0, PieceP.y - 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 0, PieceP.y + 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y - 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 0);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 1);
-			HIGHLIGHT_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			//TODO(hugo) : Roque
 		} break;
 
 		InvalidDefaultCase;
+	}
+
+	return(Sentinel);
+}
+
+internal void
+HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
+{
+	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
+	{
+		GameState->IsTileHighlighted[BOARD_COORD(Tile->P)] = true;
 	}
 }
 
@@ -572,6 +546,87 @@ v2i GetClickedTile(board_tile* Chessboard, v2 MouseP)
 	return(Result);
 }
 
+
+union kings_positions
+{
+	struct
+	{
+		v2i WhiteP;
+		v2i BlackP;
+	};
+	v2i KingsP[2];
+};
+
+kings_positions FindKingsPositions(board_tile* Chessboard)
+{
+	bool OneKingFound = false;
+	kings_positions Result = {};
+	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+	{
+		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+		{
+			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
+			if(Piece)
+			{
+				if(Piece->Type == PieceType_King)
+				{
+					Result.KingsP[Piece->Color] = V2i(SquareX, SquareY);
+					if(OneKingFound)
+					{
+						// NOTE(hugo): Both found, return.
+						break;
+					}
+					else
+					{
+						OneKingFound = true;
+					}
+				}
+			}
+		}
+	}
+
+	return(Result);
+}
+
+player_select SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
+{
+	player_select Result = PlayerSelect_None;
+
+	// TODO(hugo) : Maybe cache the result if time-critical ?
+	kings_positions KingsPositions = FindKingsPositions(Chessboard);
+	for(u32 SquareX = 0; (Result == PlayerSelect_None) && (SquareX < 8); ++SquareX)
+	{
+		for(u32 SquareY = 0; (Result == PlayerSelect_None) && (SquareY < 8); ++SquareY)
+		{
+			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
+			if(Piece)
+			{
+				temporary_memory TileListTempMemory = BeginTemporaryMemory(Arena);
+
+				tile_list* AttackingTileList = GetAttackingTileList(Chessboard, Piece, V2i(SquareX, SquareY), Arena);
+				for(tile_list* Tile = AttackingTileList;
+					           Tile;
+					           Tile = Tile->Next)
+				{
+					if((Piece->Color == PieceColor_Black) && (Tile->P.x == KingsPositions.WhiteP.x) && (Tile->P.y == KingsPositions.WhiteP.y))
+					{
+						Result = PlayerSelect_White;
+						break;
+					}
+					else if((Piece->Color == PieceColor_White) && (Tile->P.x == KingsPositions.BlackP.x) && (Tile->P.y == KingsPositions.BlackP.y))
+					{
+						Result = PlayerSelect_Black;
+						break;
+					}
+				}
+				EndTemporaryMemory(TileListTempMemory);
+			}
+		}
+	}
+
+	return(Result);
+}
+
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
 internal void
 GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
@@ -596,7 +651,9 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
-		DisplayChessboardToConsole(GameState->Chessboard);
+		GameState->PlayerToPlay = PieceColor_White;
+
+		//DisplayChessboardToConsole(GameState->Chessboard);
 
 		GameState->IsInitialised = true;
 	}
@@ -607,22 +664,36 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	{
 		GameState->ClickedTile = GetClickedTile(GameState->Chessboard, Input->Mouse.P);
 		chess_piece* Piece = GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)];
-		if(Piece)
+		if(Piece && Piece->Color == GameState->PlayerToPlay)
 		{
 			ClearTileHighlighted(GameState);
-			HighlightPossibleMoves(GameState, Piece, GameState->ClickedTile);
+
+
+			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, GameState->ClickedTile, &GameState->GameArena);
+
+			HighlightPossibleMoves(GameState, AttackingTileList);
+			EndTemporaryMemory(HighlightingTileTempMemory);
+
+
 			GameState->SelectedPieceP = GameState->ClickedTile;
 		}
 		else
 		{
 			if(GameState->IsTileHighlighted[BOARD_COORD(GameState->ClickedTile)])
 			{
+				// NOTE(hugo): Make the intended move effective
+				// if the player selects a valid tile
 				chess_piece* SelectedPiece = GameState->Chessboard[GameState->SelectedPieceP.x + 8 * GameState->SelectedPieceP.y];
 				Assert(SelectedPiece);
 				GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 				GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
 
 				ClearTileHighlighted(GameState);
+
+				GameState->PlayerCheckmate = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
+
+				GameState->PlayerToPlay = (piece_color)(1 - GameState->PlayerToPlay);
 			}
 		}
 	}
