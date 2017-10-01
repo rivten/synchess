@@ -66,6 +66,14 @@ enum move_type
 	MoveType_Count,
 };
 
+// NOTE(hugo) : Maybe do this struct to hold data about the current game
+// to avoid passing a lot of arguments to some functions (such as GetAttackingList and so on)
+/*
+struct chess_game_context
+{
+};
+*/
+
 struct game_state
 {
 	renderer Renderer;

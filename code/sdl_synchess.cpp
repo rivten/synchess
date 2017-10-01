@@ -307,11 +307,11 @@ IsInsideBoard(v2i TileP)
 }
 
 internal void
-AddTile(tile_list** Sentinel, v2i TileP, memory_arena* Arena)
+AddTile(tile_list** Sentinel, v2i TileP, move_type MoveType, memory_arena* Arena)
 {
 	tile_list* TileToAdd = PushStruct(Arena, tile_list);
 	TileToAdd->P = TileP;
-	TileToAdd->MoveType = MoveType_Regular;
+	TileToAdd->MoveType = MoveType;
 	if(Sentinel)
 	{
 		TileToAdd->Next = (*Sentinel);
@@ -319,30 +319,30 @@ AddTile(tile_list** Sentinel, v2i TileP, memory_arena* Arena)
 	*Sentinel = TileToAdd;
 }
 
-#define ADD_IF_IN_BOARD_AND_NO_PIECE(P)\
+#define ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P)\
 	if(IsInsideBoard(P) && (!ContainsPiece(Chessboard, P))) \
 	{\
-			AddTile(&Sentinel, P, Arena);\
+			AddTile(&Sentinel, P, MoveType_Regular, Arena);\
 	}
 
-#define ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, Color)\
+#define ADD_REGULAR_MOVE_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, Color)\
 	if(IsInsideBoard(P) && (ContainsPieceOfColor(Chessboard, (P), (Color)))) \
 	{\
-			AddTile(&Sentinel, P, Arena);\
+			AddTile(&Sentinel, P, MoveType_Regular, Arena);\
 	}
 
-#define ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Color)\
+#define ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Color)\
 	if(IsInsideBoard(P) && (!ContainsPieceOfColor(Chessboard, (P), (Color)))) \
 	{\
-			AddTile(&Sentinel, P, Arena);\
+			AddTile(&Sentinel, P, MoveType_Regular, Arena);\
 	}
 
-#define ADD_IN_DIR(PieceP, Dir)\
+#define ADD_REGULAR_MOVE_IN_DIR(PieceP, Dir)\
 	{\
 		u32 K = 1;\
 		while(IsInsideBoard(PieceP + K * Dir) && !ContainsPiece(Chessboard, PieceP + K * Dir))\
 		{\
-			AddTile(&Sentinel, PieceP + K * Dir, Arena);\
+			AddTile(&Sentinel, PieceP + K * Dir, MoveType_Regular, Arena);\
 			++K;\
 		}\
 		if(IsInsideBoard(PieceP + K * Dir))\
@@ -352,14 +352,14 @@ AddTile(tile_list** Sentinel, v2i TileP, memory_arena* Arena)
 			Assert(BlockingPiece);\
 			if(BlockingPiece->Color != Piece->Color)\
 			{\
-				AddTile(&Sentinel, BlockingPieceP, Arena);\
+				AddTile(&Sentinel, BlockingPieceP, MoveType_Regular, Arena);\
 			}\
 		}\
 	}
 
 internal tile_list*
 GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
-		v2i PieceP, memory_arena* Arena)
+		v2i PieceP, castling_state* PlayerCastlingState, memory_arena* Arena)
 {
 	tile_list* Sentinel = 0;
 
@@ -371,35 +371,35 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 			if(Piece->Color == PieceColor_White)
 			{
 				v2i P = V2i(PieceP.x, PieceP.y + 1);
-				ADD_IF_IN_BOARD_AND_NO_PIECE(P);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
 
 				P = V2i(PieceP.x - 1, PieceP.y + 1);
-				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
 				P = V2i(PieceP.x + 1, PieceP.y + 1);
-				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_Black);
 
 				if((PieceP.y == 1) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y + 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y + 2);
-					ADD_IF_IN_BOARD_AND_NO_PIECE(P);
+					ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
 				}
 			}
 			else if(Piece->Color == PieceColor_Black)
 			{
 				v2i P = V2i(PieceP.x, PieceP.y - 1);
-				ADD_IF_IN_BOARD_AND_NO_PIECE(P);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
 
 				P = V2i(PieceP.x - 1, PieceP.y - 1);
-				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
 				P = V2i(PieceP.x + 1, PieceP.y - 1);
-				ADD_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
+				ADD_REGULAR_MOVE_IF_IN_BOARD_AND_PIECE_OF_COLOR(P, PieceColor_White);
 
 				if((PieceP.y == 6) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y - 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y - 2);
-					ADD_IF_IN_BOARD_AND_NO_PIECE(P);
+					ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
 				}
 			}
 			else
@@ -411,113 +411,113 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 		case PieceType_Knight:
 		{
 			v2i P = V2i(PieceP.x - 1, PieceP.y + 2);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 2);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 2, PieceP.y + 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 2, PieceP.y - 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y - 2);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y - 2);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 2, PieceP.y - 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 2, PieceP.y + 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 		} break;
 
 		case PieceType_Bishop:
 		{
 			v2i LeftTopDir = V2i(-1, +1);
-			ADD_IN_DIR(PieceP, LeftTopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftTopDir);
 
 			v2i RightTopDir = V2i(+1, +1);
-			ADD_IN_DIR(PieceP, RightTopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightTopDir);
 
 			v2i RightDownDir = V2i(+1, -1);
-			ADD_IN_DIR(PieceP, RightDownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightDownDir);
 
 			v2i LeftDownDir = V2i(-1, -1);
-			ADD_IN_DIR(PieceP, LeftDownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftDownDir);
 		} break;
 
 		case PieceType_Rook:
 		{
 			v2i LeftDir = V2i(-1, 0);
-			ADD_IN_DIR(PieceP, LeftDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftDir);
 
 			v2i TopDir = V2i(0, +1);
-			ADD_IN_DIR(PieceP, TopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, TopDir);
 
 			v2i RightDir = V2i(+1, 0);
-			ADD_IN_DIR(PieceP, RightDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightDir);
 
 			v2i DownDir = V2i(0, -1);
-			ADD_IN_DIR(PieceP, DownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_Queen:
 		{
 			v2i LeftTopDir = V2i(-1, +1);
-			ADD_IN_DIR(PieceP, LeftTopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftTopDir);
 
 			v2i RightTopDir = V2i(+1, +1);
-			ADD_IN_DIR(PieceP, RightTopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightTopDir);
 
 			v2i RightDownDir = V2i(+1, -1);
-			ADD_IN_DIR(PieceP, RightDownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightDownDir);
 
 			v2i LeftDownDir = V2i(-1, -1);
-			ADD_IN_DIR(PieceP, LeftDownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftDownDir);
 
 			v2i LeftDir = V2i(-1, 0);
-			ADD_IN_DIR(PieceP, LeftDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, LeftDir);
 
 			v2i TopDir = V2i(0, +1);
-			ADD_IN_DIR(PieceP, TopDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, TopDir);
 
 			v2i RightDir = V2i(+1, 0);
-			ADD_IN_DIR(PieceP, RightDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, RightDir);
 
 			v2i DownDir = V2i(0, -1);
-			ADD_IN_DIR(PieceP, DownDir);
+			ADD_REGULAR_MOVE_IN_DIR(PieceP, DownDir);
 		} break;
 
 		case PieceType_King:
 		{
 			v2i P = V2i(PieceP.x - 1, PieceP.y - 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y + 0);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x - 1, PieceP.y + 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 0, PieceP.y - 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 0, PieceP.y + 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y - 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 0);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			P = V2i(PieceP.x + 1, PieceP.y + 1);
-			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
+			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
 			/* NOTE(hugo) : From wikipedia, the rules for castling are the following :
 				* The king and the chosen rook are on the player's first rank.
@@ -527,8 +527,10 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 				* The king does not pass through a square that is attacked by an enemy piece.
 				* The king does not end up in check. (True of any legal move.)
 			*/
-			if(GameState->CastlingState[Piece->Color] == CastlingState_None)
+			if(PlayerCastlingState[Piece->Color] == CastlingState_None)
 			{
+				// TODO(hugo) : Pay attention to the fact that the rook could not have moved
+				// but could also have been eaten.
 			}
 		} break;
 
@@ -628,7 +630,7 @@ kings_positions FindKingsPositions(board_tile* Chessboard)
 }
 
 internal player_select
-SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
+SearchForKingCheck(board_tile* Chessboard, castling_state* PlayerCastlingState, memory_arena* Arena)
 {
 	player_select Result = PlayerSelect_None;
 
@@ -643,7 +645,7 @@ SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
 			{
 				temporary_memory TileListTempMemory = BeginTemporaryMemory(Arena);
 
-				tile_list* AttackingTileList = GetAttackingTileList(Chessboard, Piece, V2i(SquareX, SquareY), Arena);
+				tile_list* AttackingTileList = GetAttackingTileList(Chessboard, Piece, V2i(SquareX, SquareY), PlayerCastlingState, Arena);
 				for(tile_list* Tile = AttackingTileList;
 					           Tile;
 					           Tile = Tile->Next)
@@ -688,7 +690,7 @@ IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
 }
 
 internal bool
-IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, memory_arena* Arena)
+IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, castling_state* PlayerCastlingState, memory_arena* Arena)
 {
 	bool SavingMoveFound = false;
 	for(u32 SquareX = 0; (!SavingMoveFound) && (SquareX < 8); ++SquareX)
@@ -701,7 +703,7 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, memory_arena*
 				temporary_memory CheckMateTempMemory = BeginTemporaryMemory(Arena);
 
 				v2i PieceP = V2i(SquareX, SquareY);
-				tile_list* PossibleMoves = GetAttackingTileList(Chessboard, Piece, PieceP, Arena);
+				tile_list* PossibleMoves = GetAttackingTileList(Chessboard, Piece, PieceP, PlayerCastlingState, Arena);
 				for(tile_list* Move = PossibleMoves;
 						Move;
 						Move = Move->Next)
@@ -710,7 +712,7 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, memory_arena*
 					chess_piece* OldPieceAtDestSave = Chessboard[BOARD_COORD(PieceDest)];
 					Chessboard[BOARD_COORD(PieceP)] = 0;
 					Chessboard[BOARD_COORD(PieceDest)] = Piece;
-					player_select NewCheckPlayer = SearchForKingCheck(Chessboard, Arena);
+					player_select NewCheckPlayer = SearchForKingCheck(Chessboard, PlayerCastlingState, Arena);
 					if(!IsPlayerUnderCheck(PlayerColor, NewCheckPlayer))
 					{
 						SavingMoveFound = true;
@@ -730,13 +732,15 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, memory_arena*
 }
  
 internal void
-DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, memory_arena* Arena)
+DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, castling_state* PlayerCastlingState, memory_arena* Arena)
 {
 	Assert(MoveSentinel);
 	Assert(Piece);
 	tile_list* PreviousMove = 0;
 	for(tile_list* CurrentMove = *MoveSentinel; CurrentMove; CurrentMove = CurrentMove->Next)
 	{
+		// TODO(hugo) : Are we sure that we do not need to test the MoveType ?
+		Assert(CurrentMove->MoveType == MoveType_Regular);
 		bool DeleteMove = false;
 
 		v2i PieceDest = CurrentMove->P;
@@ -744,7 +748,7 @@ DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i Piec
 		Chessboard[BOARD_COORD(PieceP)] = 0;
 		Chessboard[BOARD_COORD(PieceDest)] = Piece;
 
-		player_select NewCheckPlayer = SearchForKingCheck(Chessboard, Arena);
+		player_select NewCheckPlayer = SearchForKingCheck(Chessboard, PlayerCastlingState, Arena);
 		if(IsPlayerUnderCheck(CheckPlayer, NewCheckPlayer))
 		{
 			if(PreviousMove)
@@ -898,10 +902,11 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			ClearTileHighlighted(GameState);
 
 			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, GameState->ClickedTile, &GameState->GameArena);
+			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, 
+					GameState->ClickedTile, GameState->PlayerCastlingState, &GameState->GameArena);
 			if(AttackingTileList)
 			{
-				DeleteInvalidMoveDueToCheck(GameState->Chessboard, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, &GameState->GameArena);
+				DeleteInvalidMoveDueToCheck(GameState->Chessboard, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, GameState->PlayerCastlingState, &GameState->GameArena);
 			}
 
 			HighlightPossibleMoves(GameState, AttackingTileList);
@@ -923,6 +928,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 					Assert(SelectedPiece);
 					GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 					GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+					// TODO(hugo) : Make sure we chage the castling_state
+					// of the player if a rook or the king is moved
+					// maybe a possibility to do this efficiently would be :
+					// in the chess_game_context track the exact location
+					// of each piece (or a pointer to them) so that,
+					// if a pawn is promoted to a tower, we don't have issues
 				}
 
 				// NOTE(hugo): Update the config list
@@ -935,8 +946,8 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				ClearTileHighlighted(GameState);
 
 				// NOTE(hugo) : Resolve situation for the other player
-				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
-				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(GameState->Chessboard, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, GameState->PlayerCastlingState, &GameState->GameArena);
+				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(GameState->Chessboard, OtherColor(GameState->PlayerToPlay), GameState->PlayerCastlingState, &GameState->GameArena);
 				if(IsCurrentPlayerCheckmate)
 				{
 					printf("Checkmate !!\n");
