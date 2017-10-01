@@ -48,6 +48,24 @@ struct chessboard_config_list
 	chessboard_config_list* Next;
 };
 
+enum castling_state
+{
+	CastlingState_None = 0,
+	CastlingState_LeftRookMoved = 1 << 0,
+	CastlingState_RightRookMoved = 1 << 1,
+	CastlingState_KingMoved = 1 << 2,
+};
+
+enum move_type
+{
+	MoveType_None,
+	MoveType_Regular,
+	MoveType_Castling,
+	MoveType_EnPassant,
+
+	MoveType_Count,
+};
+
 struct game_state
 {
 	renderer Renderer;
@@ -56,13 +74,15 @@ struct game_state
 	u32 SquareSizeInPixels;
 
 	board_tile Chessboard[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
-	bool IsTileHighlighted[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
+	move_type TileHighlighted[SQUARE_PER_SIDE * SQUARE_PER_SIDE];
 	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
 	v2i ClickedTile;
 	v2i SelectedPieceP;
 
 	piece_color PlayerToPlay;
 	player_select PlayerCheck;
+
+	castling_state PlayerCastlingState[2];
 
 	chessboard_config_list* ChessboardConfigSentinel;
 
@@ -72,6 +92,6 @@ struct game_state
 struct tile_list
 {
 	v2i P;
+	move_type MoveType;
 	tile_list* Next;
 };
-

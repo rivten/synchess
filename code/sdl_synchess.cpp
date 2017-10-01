@@ -292,9 +292,9 @@ ContainsPieceOfColor(board_tile* Chessboard, v2i TileP, piece_color Color)
 internal void
 ClearTileHighlighted(game_state* GameState)
 {
-	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->IsTileHighlighted); ++TileIndex)
+	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->TileHighlighted); ++TileIndex)
 	{
-		GameState->IsTileHighlighted[TileIndex] = false;
+		GameState->TileHighlighted[TileIndex] = MoveType_None;
 	}
 }
 
@@ -311,6 +311,7 @@ AddTile(tile_list** Sentinel, v2i TileP, memory_arena* Arena)
 {
 	tile_list* TileToAdd = PushStruct(Arena, tile_list);
 	TileToAdd->P = TileP;
+	TileToAdd->MoveType = MoveType_Regular;
 	if(Sentinel)
 	{
 		TileToAdd->Next = (*Sentinel);
@@ -518,7 +519,17 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 			P = V2i(PieceP.x + 1, PieceP.y + 1);
 			ADD_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
 
-			//TODO(hugo) : Roque
+			/* NOTE(hugo) : From wikipedia, the rules for castling are the following :
+				* The king and the chosen rook are on the player's first rank.
+				* Neither the king nor the chosen rook has previously moved.
+				* There are no pieces between the king and the chosen rook.
+				* The king is not currently in check.
+				* The king does not pass through a square that is attacked by an enemy piece.
+				* The king does not end up in check. (True of any legal move.)
+			*/
+			if(GameState->CastlingState[Piece->Color] == CastlingState_None)
+			{
+			}
 		} break;
 
 		InvalidDefaultCase;
@@ -532,7 +543,7 @@ HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
 {
 	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
 	{
-		GameState->IsTileHighlighted[BOARD_COORD(Tile->P)] = true;
+		GameState->TileHighlighted[BOARD_COORD(Tile->P)] = Tile->MoveType;
 	}
 }
 
@@ -880,11 +891,11 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
 	{
 		GameState->ClickedTile = GetClickedTile(GameState->Chessboard, Input->Mouse.P);
+		Assert(IsInsideBoard(GameState->ClickedTile));
 		chess_piece* Piece = GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)];
-		if(Piece && Piece->Color == GameState->PlayerToPlay)
+		if(Piece && (Piece->Color == GameState->PlayerToPlay))
 		{
 			ClearTileHighlighted(GameState);
-
 
 			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
 			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, GameState->ClickedTile, &GameState->GameArena);
@@ -901,14 +912,18 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		}
 		else
 		{
-			if(GameState->IsTileHighlighted[BOARD_COORD(GameState->ClickedTile)])
+			move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
+			if(ClickMoveType != MoveType_None)
 			{
 				// NOTE(hugo): Make the intended move effective
 				// if the player selects a valid tile
-				chess_piece* SelectedPiece = GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
-				Assert(SelectedPiece);
-				GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
-				GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+				if(ClickMoveType == MoveType_Regular)
+				{
+					chess_piece* SelectedPiece = GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+					Assert(SelectedPiece);
+					GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
+					GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+				}
 
 				// NOTE(hugo): Update the config list
 				chessboard_config_list* NewChessboardConfigList = 
@@ -919,6 +934,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 				ClearTileHighlighted(GameState);
 
+				// NOTE(hugo) : Resolve situation for the other player
 				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
 				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(GameState->Chessboard, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
 				if(IsCurrentPlayerCheckmate)
@@ -968,7 +984,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			v4 SquareBackgroundColor = (IsWhiteTile) ? 
 				V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
 
-			if(GameState->IsTileHighlighted[SquareX + SQUARE_PER_SIDE * SquareY])
+			if(GameState->TileHighlighted[SquareX + SQUARE_PER_SIDE * SquareY] != MoveType_None)
 			{
 				SquareBackgroundColor = V4(0.0f, 1.0f, 1.0f, 1.0f);
 			}
