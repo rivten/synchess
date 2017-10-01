@@ -51,7 +51,7 @@ struct game_state
 	v2i SelectedPieceP;
 
 	piece_color PlayerToPlay;
-	player_select PlayerCheckmate;
+	player_select PlayerCheck;
 
 	bool IsInitialised;
 };

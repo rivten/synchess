@@ -546,7 +546,6 @@ v2i GetClickedTile(board_tile* Chessboard, v2 MouseP)
 	return(Result);
 }
 
-
 union kings_positions
 {
 	struct
@@ -610,12 +609,12 @@ player_select SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
 				{
 					if((Piece->Color == PieceColor_Black) && (Tile->P.x == KingsPositions.WhiteP.x) && (Tile->P.y == KingsPositions.WhiteP.y))
 					{
-						Result = PlayerSelect_White;
+						Result = player_select(Result | PlayerSelect_White);
 						break;
 					}
 					else if((Piece->Color == PieceColor_White) && (Tile->P.x == KingsPositions.BlackP.x) && (Tile->P.y == KingsPositions.BlackP.y))
 					{
-						Result = PlayerSelect_Black;
+						Result = player_select(Result | PlayerSelect_Black);
 						break;
 					}
 				}
@@ -625,6 +624,65 @@ player_select SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
 	}
 
 	return(Result);
+}
+
+bool IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
+{
+	bool Result = false;
+	if(PieceColor == PieceColor_White)
+	{
+		Result = ((PlayerSelect_White & Player) != 0);
+	}
+	else if(PieceColor == PieceColor_Black)
+	{
+		Result = ((PlayerSelect_Black & Player) != 0);
+	}
+	else
+	{
+		InvalidCodePath;
+	}
+
+	return(Result);
+}
+
+internal void
+DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, memory_arena* Arena)
+{
+	Assert(MoveSentinel);
+	Assert(Piece);
+	tile_list* PreviousMove = 0;
+	for(tile_list* CurrentMove = *MoveSentinel; CurrentMove; CurrentMove = CurrentMove->Next)
+	{
+		bool DeleteMove = false;
+
+		v2i PieceDest = CurrentMove->P;
+		chess_piece* OldPieceAtDestSave = Chessboard[BOARD_COORD(PieceDest)];
+		Chessboard[BOARD_COORD(PieceP)] = 0;
+		Chessboard[BOARD_COORD(PieceDest)] = Piece;
+
+		player_select NewCheckPlayer = SearchForKingCheck(Chessboard, Arena);
+		if(IsPlayerUnderCheck(CheckPlayer, NewCheckPlayer))
+		{
+			if(PreviousMove)
+			{
+				PreviousMove->Next = CurrentMove->Next;
+			}
+			else
+			{
+				*MoveSentinel = CurrentMove->Next;
+			}
+			DeleteMove = true;
+		}
+
+		// NOTE(hugo) : Putting it back like it was before
+		Chessboard[BOARD_COORD(PieceP)] = Piece;
+		Chessboard[BOARD_COORD(PieceDest)] = OldPieceAtDestSave;
+
+		if(!DeleteMove)
+		{
+			PreviousMove = CurrentMove;
+		}
+	}
 }
 
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
@@ -671,6 +729,10 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
 			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, GameState->ClickedTile, &GameState->GameArena);
+			if(AttackingTileList)
+			{
+				DeleteInvalidMoveDueToCheck(GameState->Chessboard, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, &GameState->GameArena);
+			}
 
 			HighlightPossibleMoves(GameState, AttackingTileList);
 			EndTemporaryMemory(HighlightingTileTempMemory);
@@ -691,7 +753,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 				ClearTileHighlighted(GameState);
 
-				GameState->PlayerCheckmate = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
+				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
 
 				GameState->PlayerToPlay = (piece_color)(1 - GameState->PlayerToPlay);
 			}
