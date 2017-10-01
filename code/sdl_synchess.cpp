@@ -251,6 +251,34 @@ ContainsPiece(board_tile* Chessboard, v2i TileP)
 	return(Result);
 }
 
+u8 SafeTruncateU32ToU8(u32 Value)
+{
+	Assert(Value <= 0xFF);
+	u8 Result = (Value & 0xFF);
+
+	return(Result);
+}
+
+internal chessboard_config
+WriteConfig(board_tile* Chessboard)
+{
+	chessboard_config Result = {};
+	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+	{
+		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+		{
+			u32 SquareIndex = SquareX + 8 * SquareY;
+			Result.Tiles[SquareIndex] = u8(0x0000);
+			chess_piece* Piece = Chessboard[SquareIndex];
+			if(Piece)
+			{
+				Result.Tiles[SquareIndex] = SafeTruncateU32ToU8(1 + Piece->Type + PieceType_Count * Piece->Color);
+			}
+		}
+	}
+	return(Result);
+}
+
 #define BOARD_COORD(P) (P).x + 8 * (P).y
 
 internal bool
@@ -534,7 +562,8 @@ LoadPieceBitmaps(bitmap* Bitmaps)
 	Bitmaps[PieceColor_Black * PieceType_Count + PieceType_King] = LoadBitmap("../data/BlackKing.png");
 }
 
-v2i GetClickedTile(board_tile* Chessboard, v2 MouseP)
+internal v2i
+GetClickedTile(board_tile* Chessboard, v2 MouseP)
 {
 	v2i Result = V2i(0, 0);
 	v2 TileP = MouseP / (GlobalWindowHeight / 8);
@@ -587,15 +616,16 @@ kings_positions FindKingsPositions(board_tile* Chessboard)
 	return(Result);
 }
 
-player_select SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
+internal player_select
+SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
 {
 	player_select Result = PlayerSelect_None;
 
 	// TODO(hugo) : Maybe cache the result if time-critical ?
 	kings_positions KingsPositions = FindKingsPositions(Chessboard);
-	for(u32 SquareX = 0; (Result == PlayerSelect_None) && (SquareX < 8); ++SquareX)
+	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 	{
-		for(u32 SquareY = 0; (Result == PlayerSelect_None) && (SquareY < 8); ++SquareY)
+		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 		{
 			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
@@ -626,7 +656,8 @@ player_select SearchForKingCheck(board_tile* Chessboard, memory_arena* Arena)
 	return(Result);
 }
 
-bool IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
+internal bool
+IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
 {
 	bool Result = false;
 	if(PieceColor == PieceColor_White)
@@ -645,6 +676,48 @@ bool IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
 	return(Result);
 }
 
+internal bool
+IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, memory_arena* Arena)
+{
+	bool SavingMoveFound = false;
+	for(u32 SquareX = 0; (!SavingMoveFound) && (SquareX < 8); ++SquareX)
+	{
+		for(u32 SquareY = 0; (!SavingMoveFound) && (SquareY < 8); ++SquareY)
+		{
+			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
+			if(Piece && (Piece->Color == PlayerColor))
+			{
+				temporary_memory CheckMateTempMemory = BeginTemporaryMemory(Arena);
+
+				v2i PieceP = V2i(SquareX, SquareY);
+				tile_list* PossibleMoves = GetAttackingTileList(Chessboard, Piece, PieceP, Arena);
+				for(tile_list* Move = PossibleMoves;
+						Move;
+						Move = Move->Next)
+				{
+					v2i PieceDest = Move->P;
+					chess_piece* OldPieceAtDestSave = Chessboard[BOARD_COORD(PieceDest)];
+					Chessboard[BOARD_COORD(PieceP)] = 0;
+					Chessboard[BOARD_COORD(PieceDest)] = Piece;
+					player_select NewCheckPlayer = SearchForKingCheck(Chessboard, Arena);
+					if(!IsPlayerUnderCheck(PlayerColor, NewCheckPlayer))
+					{
+						SavingMoveFound = true;
+					}
+
+					// NOTE(hugo) : Putting it back like it was before
+					Chessboard[BOARD_COORD(PieceP)] = Piece;
+					Chessboard[BOARD_COORD(PieceDest)] = OldPieceAtDestSave;
+				}
+
+				EndTemporaryMemory(CheckMateTempMemory);
+			}
+		}
+	}
+
+	return(!SavingMoveFound);
+}
+ 
 internal void
 DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, memory_arena* Arena)
 {
@@ -685,6 +758,30 @@ DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i Piec
 	}
 }
 
+piece_color OtherColor(piece_color Color)
+{
+	Assert(Color != PieceColor_Count);
+	piece_color Result = (piece_color)(1 - Color);
+	return(Result);
+}
+
+internal void
+DEBUGWriteConfigListToFile(chessboard_config_list* Sentinel)
+{
+	FILE* FileHandle = fopen("list_move.bin", "wb");
+	Assert(FileHandle);
+
+	for(chessboard_config_list* Config = Sentinel;
+			Config;
+			Config = Config->Next)
+	{
+		chessboard_config ChessboardConfig = Config->Config;
+		fwrite(&ChessboardConfig, sizeof(ChessboardConfig), 1, FileHandle);
+	}
+
+	fclose(FileHandle);
+}
+
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
 internal void
 GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
@@ -710,6 +807,8 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
 		GameState->PlayerToPlay = PieceColor_White;
+
+		GameState->ChessboardConfigSentinel = 0;
 
 		//DisplayChessboardToConsole(GameState->Chessboard);
 
@@ -746,16 +845,29 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			{
 				// NOTE(hugo): Make the intended move effective
 				// if the player selects a valid tile
-				chess_piece* SelectedPiece = GameState->Chessboard[GameState->SelectedPieceP.x + 8 * GameState->SelectedPieceP.y];
+				chess_piece* SelectedPiece = GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
 				Assert(SelectedPiece);
 				GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 				GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
 
+				// NOTE(hugo): Update the config list
+				chessboard_config_list* NewChessboardConfigList = 
+					PushStruct(&GameState->GameArena, chessboard_config_list);
+				NewChessboardConfigList->Config = WriteConfig(GameState->Chessboard);
+				NewChessboardConfigList->Next = GameState->ChessboardConfigSentinel;
+				GameState->ChessboardConfigSentinel = NewChessboardConfigList;
+
 				ClearTileHighlighted(GameState);
 
 				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, &GameState->GameArena);
+				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(GameState->Chessboard, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+				if(IsCurrentPlayerCheckmate)
+				{
+					printf("Checkmate !!\n");
+					DEBUGWriteConfigListToFile(GameState->ChessboardConfigSentinel);
+				}
 
-				GameState->PlayerToPlay = (piece_color)(1 - GameState->PlayerToPlay);
+				GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
 			}
 		}
 	}

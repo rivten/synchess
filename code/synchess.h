@@ -37,6 +37,17 @@ enum player_select
 	PlayerSelect_Black = 2,
 };
 
+struct chessboard_config
+{
+	u8 Tiles[64];
+};
+
+struct chessboard_config_list
+{
+	chessboard_config Config;
+	chessboard_config_list* Next;
+};
+
 struct game_state
 {
 	renderer Renderer;
@@ -52,6 +63,8 @@ struct game_state
 
 	piece_color PlayerToPlay;
 	player_select PlayerCheck;
+
+	chessboard_config_list* ChessboardConfigSentinel;
 
 	bool IsInitialised;
 };
