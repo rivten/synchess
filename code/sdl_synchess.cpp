@@ -782,6 +782,66 @@ DEBUGWriteConfigListToFile(chessboard_config_list* Sentinel)
 	fclose(FileHandle);
 }
 
+internal bool
+ConfigMatch(chessboard_config* ConfigA, chessboard_config* ConfigB)
+{
+	bool Match = true;
+	for(u32 TileIndex = 0;
+			Match && (TileIndex < ArrayCount(ConfigA->Tiles));
+			++TileIndex)
+	{
+		u8 TileA = ConfigA->Tiles[TileIndex];
+		u8 TileB = ConfigB->Tiles[TileIndex];
+		Match = (TileA == TileB);
+	}
+
+	return(Match);
+}
+
+// TODO(hugo) : Test this function
+internal bool
+IsDraw(game_state* GameState)
+{
+	/* NOTE(hugo) : From Wikipedia :
+	 The game ends in a draw if any of these conditions occur:
+		* The game is automatically a draw if the player to move is not in check but has no legal move. This situation is called a stalemate. An example of such a position is shown in the adjacent diagram.
+		* The game is immediately drawn when there is no possibility of checkmate for either side with any series of legal moves. This draw is often due to insufficient material, including the endgames
+			- king against king;
+			- king against king and bishop;
+			- king against king and knight;
+			- king and bishop against king and bishop, with both bishops on squares of the same color;
+		* Both players agree to a draw after one of the players makes such an offer.
+		* The player having the move may claim a draw by declaring that one of the following conditions exists, or by declaring an intention to make a move which will bring about one of these conditions:
+		* Fifty-move rule: There has been no capture or pawn move in the last fifty moves by each player.
+		* Threefold repetition: The same board position has occurred three times with the same player to move and all pieces having the same rights to move, including the right to castle or capture en passant.
+	*/
+
+	bool DrawCaseFound = false;
+
+	// NOTE(hugo) : Checking for threefold repetition
+	// TODO(hugo) : Check for right to castle or capture en passant
+	chessboard_config CurrentConfig = WriteConfig(GameState->Chessboard);
+	u32 ConfigMatchCounter = 0;
+	for(chessboard_config_list* CurrentTestConfig = GameState->ChessboardConfigSentinel;
+			!DrawCaseFound && CurrentTestConfig;
+			CurrentTestConfig = CurrentTestConfig->Next)
+	{
+		chessboard_config TestConfig = CurrentTestConfig->Config;
+		if(ConfigMatch(&TestConfig, &CurrentConfig))
+		{
+			++ConfigMatchCounter;
+			if(ConfigMatchCounter >= 2)
+			{
+				// NOTE(hugo) : We found two _other_ identical configurations
+				// Therefore this is the third one. This is a draw.
+				DrawCaseFound = true;
+			}
+		}
+	}
+
+	return(DrawCaseFound);
+}
+
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
 internal void
 GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
@@ -864,6 +924,11 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				if(IsCurrentPlayerCheckmate)
 				{
 					printf("Checkmate !!\n");
+					DEBUGWriteConfigListToFile(GameState->ChessboardConfigSentinel);
+				}
+				else if(IsDraw(GameState))
+				{
+					printf("PAT !!\n");
 					DEBUGWriteConfigListToFile(GameState->ChessboardConfigSentinel);
 				}
 
