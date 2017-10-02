@@ -156,9 +156,9 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 internal void
 DisplayChessboardToConsole(board_tile* Chessboard)
 {
-	for(s32 LineIndex = SQUARE_PER_SIDE - 1; LineIndex >= 0; --LineIndex)
+	for(s32 LineIndex = 7; LineIndex >= 0; --LineIndex)
 	{
-		for(u32 RowIndex = 0; RowIndex < SQUARE_PER_SIDE; ++RowIndex)
+		for(u32 RowIndex = 0; RowIndex < 8; ++RowIndex)
 		{
 			chess_piece* Piece = Chessboard[RowIndex + 8 * LineIndex];
 			if(Piece)
@@ -246,7 +246,7 @@ DisplayChessboardToConsole(board_tile* Chessboard)
 internal bool
 ContainsPiece(board_tile* Chessboard, v2i TileP)
 {
-	chess_piece* Piece = Chessboard[TileP.x + SQUARE_PER_SIDE * TileP.y];
+	chess_piece* Piece = Chessboard[TileP.x + 8 * TileP.y];
 	bool Result = (Piece != 0);
 	return(Result);
 }
@@ -301,8 +301,35 @@ ClearTileHighlighted(game_state* GameState)
 internal bool
 IsInsideBoard(v2i TileP)
 {
-	bool Result = (TileP.x >= 0) && (TileP.x < SQUARE_PER_SIDE)
-		&& (TileP.y >= 0) && (TileP.y < SQUARE_PER_SIDE);
+	bool Result = (TileP.x >= 0) && (TileP.x < 8)
+		&& (TileP.y >= 0) && (TileP.y < 8);
+	return(Result);
+}
+
+piece_color OtherColor(piece_color Color)
+{
+	Assert(Color != PieceColor_Count);
+	piece_color Result = (piece_color)(1 - Color);
+	return(Result);
+}
+
+internal bool
+IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
+{
+	bool Result = false;
+	if(PieceColor == PieceColor_White)
+	{
+		Result = ((PlayerSelect_White & Player) != 0);
+	}
+	else if(PieceColor == PieceColor_Black)
+	{
+		Result = ((PlayerSelect_Black & Player) != 0);
+	}
+	else
+	{
+		InvalidCodePath;
+	}
+
 	return(Result);
 }
 
@@ -358,10 +385,11 @@ AddTile(tile_list** Sentinel, v2i TileP, move_type MoveType, memory_arena* Arena
 	}
 
 internal tile_list*
-GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
-		v2i PieceP, castling_state* PlayerCastlingState, memory_arena* Arena)
+GetAttackingTileList(chess_game_context* ChessContext, chess_piece* Piece,
+		v2i PieceP, memory_arena* Arena)
 {
 	tile_list* Sentinel = 0;
+	board_tile* Chessboard = ChessContext->Chessboard;
 
 	Assert(Piece);
 	switch(Piece->Type)
@@ -518,20 +546,6 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 
 			P = V2i(PieceP.x + 1, PieceP.y + 1);
 			ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE_OF_COLOR(P, Piece->Color);
-
-			/* NOTE(hugo) : From wikipedia, the rules for castling are the following :
-				* The king and the chosen rook are on the player's first rank.
-				* Neither the king nor the chosen rook has previously moved.
-				* There are no pieces between the king and the chosen rook.
-				* The king is not currently in check.
-				* The king does not pass through a square that is attacked by an enemy piece.
-				* The king does not end up in check. (True of any legal move.)
-			*/
-			if(PlayerCastlingState[Piece->Color] == CastlingState_None)
-			{
-				// TODO(hugo) : Pay attention to the fact that the rook could not have moved
-				// but could also have been eaten.
-			}
 		} break;
 
 		InvalidDefaultCase;
@@ -539,6 +553,145 @@ GetAttackingTileList(board_tile* Chessboard, chess_piece* Piece,
 
 	return(Sentinel);
 }
+
+enum castling_type
+{
+	CastlingType_KingSide,
+	CastlingType_QueenSide,
+};
+
+internal bool
+IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color, castling_type CastlingType, memory_arena* Arena)
+{
+	bool IsClean = true;
+
+	u32 LowX = 0;
+	u32 HighX = 0;
+	if(CastlingType == CastlingType_KingSide)
+	{
+		LowX = 1;
+		HighX = 4;
+	}
+	else if(CastlingType == CastlingType_QueenSide)
+	{
+		LowX = 5;
+		HighX = 7;
+	}
+	else
+	{
+		InvalidCodePath;
+	}
+
+
+	u32 SquareY = (Color == PieceColor_White) ? 0 : 7;
+	for(u32 SquareX = LowX; IsClean && (SquareX < HighX); ++SquareX)
+	{
+		chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
+		if(Piece)
+		{
+			IsClean = false;
+		}
+	}
+	for(u32 SquareX = 0; IsClean && (SquareX < 8); ++SquareX)
+	{
+		for(u32 SquareY = 0; IsClean && (SquareY < 8); ++SquareY)
+		{
+			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
+			if(Piece && (Piece->Color == OtherColor(Color)))
+			{
+				tile_list* PieceAttackingSquareSentinel =
+					GetAttackingTileList(ChessContext, Piece, V2i(SquareX, SquareY), Arena);
+				for(tile_list* AttackedSquare = PieceAttackingSquareSentinel;
+						IsClean && AttackedSquare;
+						AttackedSquare = AttackedSquare->Next)
+				{
+					v2i AttackedSquareP = AttackedSquare->P;
+
+					u32 LowBoundX = 0;
+					u32 HighBoundX = 0;
+
+					if(CastlingType == CastlingType_KingSide)
+					{
+						LowBoundX = 2;
+						HighBoundX = 3;
+					}
+					else if(CastlingType == CastlingType_QueenSide)
+					{
+						LowBoundX = 5;
+						HighBoundX = 6;
+					}
+					else
+					{
+						InvalidCodePath;
+					}
+
+					if((u32(AttackedSquareP.x) >= LowBoundX) && (u32(AttackedSquareP.x) <= HighBoundX))
+					{
+						if((Color == PieceColor_White) && (AttackedSquareP.y == 0))
+						{
+							IsClean = false;
+						}
+						else if((Color == PieceColor_Black) && (AttackedSquareP.y == 7))
+						{
+							IsClean = false;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return(IsClean);
+}
+
+// TODO(hugo):
+//   * Make sure to call GetPossibleMoveList instead of GetAttackingTileList whenever possible
+//   * Update the Chess Context when we see an important piece move
+//   * Hope that the perf won't be too affected
+internal tile_list*
+GetPossibleMoveList(chess_game_context* ChessContext, chess_piece* Piece,
+		v2i PieceP, memory_arena* Arena)
+{
+	tile_list* Sentinel = GetAttackingTileList(ChessContext, Piece, PieceP, Arena);
+	if(Piece->Type = PieceType_King)
+	{
+		/* NOTE(hugo) : From wikipedia, the rules for castling are the following :
+			* The king and the chosen rook are on the player's first rank.
+			* Neither the king nor the chosen rook has previously moved.
+			* There are no pieces between the king and the chosen rook.
+			* The king is not currently in check.
+			* The king does not pass through a square that is attacked by an enemy piece.
+			* The king does not end up in check. (True of any legal move.)
+		*/
+		if((IsPlayerUnderCheck(Piece->Color, ChessContext->PlayerCheck)) &&
+				(!ChessContext->CastlingPieceTracker[Piece->Color].KingHasMoved))
+		{
+			if(ChessContext->CastlingPieceTracker[Piece->Color].QueenRook.IsFirstRank &&
+					(!ChessContext->CastlingPieceTracker[Piece->Color].QueenRook.HasMoved))
+			{
+				// NOTE(hugo) : Queen side castling
+				if(IsChessboardCleanForCastling(ChessContext, Piece->Color, CastlingType_QueenSide, Arena))
+				{
+					v2i TileP = V2i(2, Piece->Color == PieceColor_White ? 0 : 7);
+					AddTile(&Sentinel, TileP, MoveType_CastlingQueenSide, Arena);
+				}
+			}
+			else if(ChessContext->CastlingPieceTracker[Piece->Color].KingRook.IsFirstRank &&
+					(!ChessContext->CastlingPieceTracker[Piece->Color].KingRook.HasMoved))
+			{
+				// NOTE(hugo) : King side castling
+				if(IsChessboardCleanForCastling(ChessContext, Piece->Color, CastlingType_KingSide, Arena))
+				{
+					v2i TileP = V2i(6, Piece->Color == PieceColor_White ? 0 : 7);
+					AddTile(&Sentinel, TileP, MoveType_CastlingKingSide, Arena);
+				}
+			}
+		}
+	}
+
+	return(Sentinel);
+}
+
 
 internal void
 HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
@@ -630,22 +783,22 @@ kings_positions FindKingsPositions(board_tile* Chessboard)
 }
 
 internal player_select
-SearchForKingCheck(board_tile* Chessboard, castling_state* PlayerCastlingState, memory_arena* Arena)
+SearchForKingCheck(chess_game_context* ChessContext, memory_arena* Arena)
 {
 	player_select Result = PlayerSelect_None;
 
 	// TODO(hugo) : Maybe cache the result if time-critical ?
-	kings_positions KingsPositions = FindKingsPositions(Chessboard);
+	kings_positions KingsPositions = FindKingsPositions(ChessContext->Chessboard);
 	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 	{
 		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 		{
-			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
+			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
 			{
 				temporary_memory TileListTempMemory = BeginTemporaryMemory(Arena);
 
-				tile_list* AttackingTileList = GetAttackingTileList(Chessboard, Piece, V2i(SquareX, SquareY), PlayerCastlingState, Arena);
+				tile_list* AttackingTileList = GetAttackingTileList(ChessContext, Piece, V2i(SquareX, SquareY), Arena);
 				for(tile_list* Tile = AttackingTileList;
 					           Tile;
 					           Tile = Tile->Next)
@@ -670,28 +823,9 @@ SearchForKingCheck(board_tile* Chessboard, castling_state* PlayerCastlingState, 
 }
 
 internal bool
-IsPlayerUnderCheck(piece_color PieceColor, player_select Player)
+IsPlayerCheckmate(chess_game_context* ChessContext, piece_color PlayerColor, memory_arena* Arena)
 {
-	bool Result = false;
-	if(PieceColor == PieceColor_White)
-	{
-		Result = ((PlayerSelect_White & Player) != 0);
-	}
-	else if(PieceColor == PieceColor_Black)
-	{
-		Result = ((PlayerSelect_Black & Player) != 0);
-	}
-	else
-	{
-		InvalidCodePath;
-	}
-
-	return(Result);
-}
-
-internal bool
-IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, castling_state* PlayerCastlingState, memory_arena* Arena)
-{
+	board_tile* Chessboard = ChessContext->Chessboard;
 	bool SavingMoveFound = false;
 	for(u32 SquareX = 0; (!SavingMoveFound) && (SquareX < 8); ++SquareX)
 	{
@@ -703,7 +837,7 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, castling_stat
 				temporary_memory CheckMateTempMemory = BeginTemporaryMemory(Arena);
 
 				v2i PieceP = V2i(SquareX, SquareY);
-				tile_list* PossibleMoves = GetAttackingTileList(Chessboard, Piece, PieceP, PlayerCastlingState, Arena);
+				tile_list* PossibleMoves = GetAttackingTileList(ChessContext, Piece, PieceP, Arena);
 				for(tile_list* Move = PossibleMoves;
 						Move;
 						Move = Move->Next)
@@ -712,7 +846,7 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, castling_stat
 					chess_piece* OldPieceAtDestSave = Chessboard[BOARD_COORD(PieceDest)];
 					Chessboard[BOARD_COORD(PieceP)] = 0;
 					Chessboard[BOARD_COORD(PieceDest)] = Piece;
-					player_select NewCheckPlayer = SearchForKingCheck(Chessboard, PlayerCastlingState, Arena);
+					player_select NewCheckPlayer = SearchForKingCheck(ChessContext, Arena);
 					if(!IsPlayerUnderCheck(PlayerColor, NewCheckPlayer))
 					{
 						SavingMoveFound = true;
@@ -732,10 +866,11 @@ IsPlayerCheckmate(board_tile* Chessboard, piece_color PlayerColor, castling_stat
 }
  
 internal void
-DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, castling_state* PlayerCastlingState, memory_arena* Arena)
+DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece, v2i PieceP, tile_list** MoveSentinel, piece_color CheckPlayer, memory_arena* Arena)
 {
 	Assert(MoveSentinel);
 	Assert(Piece);
+	board_tile* Chessboard = ChessContext->Chessboard;
 	tile_list* PreviousMove = 0;
 	for(tile_list* CurrentMove = *MoveSentinel; CurrentMove; CurrentMove = CurrentMove->Next)
 	{
@@ -748,7 +883,7 @@ DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i Piec
 		Chessboard[BOARD_COORD(PieceP)] = 0;
 		Chessboard[BOARD_COORD(PieceDest)] = Piece;
 
-		player_select NewCheckPlayer = SearchForKingCheck(Chessboard, PlayerCastlingState, Arena);
+		player_select NewCheckPlayer = SearchForKingCheck(ChessContext, Arena);
 		if(IsPlayerUnderCheck(CheckPlayer, NewCheckPlayer))
 		{
 			if(PreviousMove)
@@ -771,13 +906,6 @@ DeleteInvalidMoveDueToCheck(board_tile* Chessboard, chess_piece* Piece, v2i Piec
 			PreviousMove = CurrentMove;
 		}
 	}
-}
-
-piece_color OtherColor(piece_color Color)
-{
-	Assert(Color != PieceColor_Count);
-	piece_color Result = (piece_color)(1 - Color);
-	return(Result);
 }
 
 internal void
@@ -835,9 +963,9 @@ IsDraw(game_state* GameState)
 
 	// NOTE(hugo) : Checking for threefold repetition
 	// TODO(hugo) : Check for right to castle or capture en passant
-	chessboard_config CurrentConfig = WriteConfig(GameState->Chessboard);
+	chessboard_config CurrentConfig = WriteConfig(GameState->ChessContext.Chessboard);
 	u32 ConfigMatchCounter = 0;
-	for(chessboard_config_list* CurrentTestConfig = GameState->ChessboardConfigSentinel;
+	for(chessboard_config_list* CurrentTestConfig = GameState->ChessContext.ChessboardConfigSentinel;
 			!DrawCaseFound && CurrentTestConfig;
 			CurrentTestConfig = CurrentTestConfig->Next)
 	{
@@ -855,6 +983,25 @@ IsDraw(game_state* GameState)
 	}
 
 	return(DrawCaseFound);
+}
+
+internal void
+InitialiseChessContext(chess_game_context* ChessContext, memory_arena* Arena)
+{
+	InitialiseChessboard(ChessContext->Chessboard, Arena);
+	ChessContext->ChessboardConfigSentinel = 0;
+
+	ChessContext->CastlingPieceTracker[PieceColor_White].KingHasMoved = false;
+	ChessContext->CastlingPieceTracker[PieceColor_White].QueenRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_White].QueenRook.HasMoved = false;
+	ChessContext->CastlingPieceTracker[PieceColor_White].KingRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_White].KingRook.HasMoved = false;
+
+	ChessContext->CastlingPieceTracker[PieceColor_Black].KingHasMoved = false;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].QueenRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].QueenRook.HasMoved = false;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.HasMoved = false;
 }
 
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there
@@ -876,16 +1023,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		u64 GameArenaSize = Megabytes(128);
 		void* GameArenaMemoryBase = (u8*)GameMemory->Storage + sizeof(game_state) + RenderArenaSize;
 		InitialiseArena(&GameState->GameArena, GameArenaSize, GameArenaMemoryBase);
-		InitialiseChessboard(GameState->Chessboard, &GameState->GameArena);
+		InitialiseChessContext(&GameState->ChessContext, &GameState->GameArena);
 
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
 		GameState->PlayerToPlay = PieceColor_White;
-
-		GameState->ChessboardConfigSentinel = 0;
-
-		//DisplayChessboardToConsole(GameState->Chessboard);
 
 		GameState->IsInitialised = true;
 	}
@@ -894,19 +1037,19 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	// {
 	if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
 	{
-		GameState->ClickedTile = GetClickedTile(GameState->Chessboard, Input->Mouse.P);
+		GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
 		Assert(IsInsideBoard(GameState->ClickedTile));
-		chess_piece* Piece = GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)];
+		chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
 		if(Piece && (Piece->Color == GameState->PlayerToPlay))
 		{
 			ClearTileHighlighted(GameState);
 
 			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-			tile_list* AttackingTileList = GetAttackingTileList(GameState->Chessboard, Piece, 
-					GameState->ClickedTile, GameState->PlayerCastlingState, &GameState->GameArena);
+			tile_list* AttackingTileList = GetAttackingTileList(&GameState->ChessContext, Piece, 
+					GameState->ClickedTile, &GameState->GameArena);
 			if(AttackingTileList)
 			{
-				DeleteInvalidMoveDueToCheck(GameState->Chessboard, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, GameState->PlayerCastlingState, &GameState->GameArena);
+				DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, &GameState->GameArena);
 			}
 
 			HighlightPossibleMoves(GameState, AttackingTileList);
@@ -924,10 +1067,10 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				// if the player selects a valid tile
 				if(ClickMoveType == MoveType_Regular)
 				{
-					chess_piece* SelectedPiece = GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+					chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
 					Assert(SelectedPiece);
-					GameState->Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
-					GameState->Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+					GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
+					GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
 					// TODO(hugo) : Make sure we chage the castling_state
 					// of the player if a rook or the king is moved
 					// maybe a possibility to do this efficiently would be :
@@ -939,24 +1082,24 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				// NOTE(hugo): Update the config list
 				chessboard_config_list* NewChessboardConfigList = 
 					PushStruct(&GameState->GameArena, chessboard_config_list);
-				NewChessboardConfigList->Config = WriteConfig(GameState->Chessboard);
-				NewChessboardConfigList->Next = GameState->ChessboardConfigSentinel;
-				GameState->ChessboardConfigSentinel = NewChessboardConfigList;
+				NewChessboardConfigList->Config = WriteConfig(GameState->ChessContext.Chessboard);
+				NewChessboardConfigList->Next = GameState->ChessContext.ChessboardConfigSentinel;
+				GameState->ChessContext.ChessboardConfigSentinel = NewChessboardConfigList;
 
 				ClearTileHighlighted(GameState);
 
 				// NOTE(hugo) : Resolve situation for the other player
-				GameState->PlayerCheck = SearchForKingCheck(GameState->Chessboard, GameState->PlayerCastlingState, &GameState->GameArena);
-				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(GameState->Chessboard, OtherColor(GameState->PlayerToPlay), GameState->PlayerCastlingState, &GameState->GameArena);
+				GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
+				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
 				if(IsCurrentPlayerCheckmate)
 				{
 					printf("Checkmate !!\n");
-					DEBUGWriteConfigListToFile(GameState->ChessboardConfigSentinel);
+					DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 				}
 				else if(IsDraw(GameState))
 				{
 					printf("PAT !!\n");
-					DEBUGWriteConfigListToFile(GameState->ChessboardConfigSentinel);
+					DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 				}
 
 				GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
@@ -982,12 +1125,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	v2 BoardMin = 0.5f * V2(GlobalWindowWidth, GlobalWindowHeight) - 0.5f * BoardSize;
 	rect2 BoardRect = RectFromMinSize(BoardMin, BoardSize);
 
-	u32 SquareSizeInPixels = (u32)(BoardSizeInPixels / SQUARE_PER_SIDE);
+	u32 SquareSizeInPixels = (u32)(BoardSizeInPixels / 8);
 	v2i SquareSize = V2i(SquareSizeInPixels, SquareSizeInPixels);
 
-	for(u32 SquareY = 0; SquareY < SQUARE_PER_SIDE; ++SquareY)
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 	{
-		for(u32 SquareX = 0; SquareX < SQUARE_PER_SIDE; ++SquareX)
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 		{
 			v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
 			rect2 SquareRect = RectFromMinSize(SquareMin, V2(SquareSize));
@@ -995,7 +1138,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			v4 SquareBackgroundColor = (IsWhiteTile) ? 
 				V4(1.0f, 1.0f, 1.0f, 1.0f) : RGB8ToV4(RGB8(64, 146, 59));
 
-			if(GameState->TileHighlighted[SquareX + SQUARE_PER_SIDE * SquareY] != MoveType_None)
+			if(GameState->TileHighlighted[SquareX + 8 * SquareY] != MoveType_None)
 			{
 				SquareBackgroundColor = V4(0.0f, 1.0f, 1.0f, 1.0f);
 			}
@@ -1003,7 +1146,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			PushRect(Renderer, SquareRect, SquareBackgroundColor);
 
 			// NOTE(hugo) : Draw the possible piece
-			chess_piece* Piece = GameState->Chessboard[SquareX + 8 * SquareY];
+			chess_piece* Piece = GameState->ChessContext.Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
 			{
 				v2 SquareMin = Hadamard(V2(SquareX, SquareY), V2(SquareSize)) + BoardMin;
