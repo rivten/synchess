@@ -569,13 +569,13 @@ IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color
 	u32 HighX = 0;
 	if(CastlingType == CastlingType_KingSide)
 	{
-		LowX = 1;
-		HighX = 4;
+		LowX = 5;
+		HighX = 7;
 	}
 	else if(CastlingType == CastlingType_QueenSide)
 	{
-		LowX = 5;
-		HighX = 7;
+		LowX = 1;
+		HighX = 4;
 	}
 	else
 	{
@@ -592,6 +592,12 @@ IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color
 			IsClean = false;
 		}
 	}
+	if(!IsClean)
+	{
+		printf("Cannot do a castle because there are piece between the rook and the king\n");
+	}
+
+	// TODO(hugo) : Non-cache friendly traversal of the chessboard
 	for(u32 SquareX = 0; IsClean && (SquareX < 8); ++SquareX)
 	{
 		for(u32 SquareY = 0; IsClean && (SquareY < 8); ++SquareY)
@@ -612,13 +618,13 @@ IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color
 
 					if(CastlingType == CastlingType_KingSide)
 					{
-						LowBoundX = 2;
-						HighBoundX = 3;
+						LowBoundX = 5;
+						HighBoundX = 6;
 					}
 					else if(CastlingType == CastlingType_QueenSide)
 					{
-						LowBoundX = 5;
-						HighBoundX = 6;
+						LowBoundX = 2;
+						HighBoundX = 3;
 					}
 					else
 					{
@@ -641,6 +647,11 @@ IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color
 		}
 	}
 
+	if(!IsClean)
+	{
+		printf("Cannot castle because there are attacking piece on the way !\n");
+	}
+
 	return(IsClean);
 }
 
@@ -652,8 +663,12 @@ internal tile_list*
 GetPossibleMoveList(chess_game_context* ChessContext, chess_piece* Piece,
 		v2i PieceP, memory_arena* Arena)
 {
+	// NOTE(hugo) : Getting the list of possible move for the piece is the same
+	// as getting the list of its attacking square. The main difference is with the king
+	// because it can do a castling but that does not mean it is attacking the square.
+	// Therefore the disctiction.
 	tile_list* Sentinel = GetAttackingTileList(ChessContext, Piece, PieceP, Arena);
-	if(Piece->Type = PieceType_King)
+	if(Piece->Type == PieceType_King)
 	{
 		/* NOTE(hugo) : From wikipedia, the rules for castling are the following :
 			* The king and the chosen rook are on the player's first rank.
@@ -663,7 +678,7 @@ GetPossibleMoveList(chess_game_context* ChessContext, chess_piece* Piece,
 			* The king does not pass through a square that is attacked by an enemy piece.
 			* The king does not end up in check. (True of any legal move.)
 		*/
-		if((IsPlayerUnderCheck(Piece->Color, ChessContext->PlayerCheck)) &&
+		if((!IsPlayerUnderCheck(Piece->Color, ChessContext->PlayerCheck)) &&
 				(!ChessContext->CastlingPieceTracker[Piece->Color].KingHasMoved))
 		{
 			if(ChessContext->CastlingPieceTracker[Piece->Color].QueenRook.IsFirstRank &&
@@ -676,7 +691,12 @@ GetPossibleMoveList(chess_game_context* ChessContext, chess_piece* Piece,
 					AddTile(&Sentinel, TileP, MoveType_CastlingQueenSide, Arena);
 				}
 			}
-			else if(ChessContext->CastlingPieceTracker[Piece->Color].KingRook.IsFirstRank &&
+			else
+			{
+				printf("Cannot Queen castle because the queen rook has moved or is not first rank\n");
+			}
+
+			if(ChessContext->CastlingPieceTracker[Piece->Color].KingRook.IsFirstRank &&
 					(!ChessContext->CastlingPieceTracker[Piece->Color].KingRook.HasMoved))
 			{
 				// NOTE(hugo) : King side castling
@@ -685,6 +705,22 @@ GetPossibleMoveList(chess_game_context* ChessContext, chess_piece* Piece,
 					v2i TileP = V2i(6, Piece->Color == PieceColor_White ? 0 : 7);
 					AddTile(&Sentinel, TileP, MoveType_CastlingKingSide, Arena);
 				}
+			}
+			else
+			{
+				printf("Cannot King castle because the king rook has moved or is not first rank\n");
+			}
+		}
+		else
+		{
+			if(IsPlayerUnderCheck(Piece->Color, ChessContext->PlayerCheck))
+			{
+				printf("Cannot castle because player under check\n");
+			}
+			else
+			{
+				Assert((ChessContext->CastlingPieceTracker[Piece->Color].KingHasMoved));
+				printf("Cannot castle because king has moved !\n");
 			}
 		}
 	}
@@ -755,6 +791,7 @@ kings_positions FindKingsPositions(board_tile* Chessboard)
 {
 	bool OneKingFound = false;
 	kings_positions Result = {};
+	// TODO(hugo) : Non-cache friendly traversal of the chessboard
 	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 	{
 		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
@@ -789,6 +826,7 @@ SearchForKingCheck(chess_game_context* ChessContext, memory_arena* Arena)
 
 	// TODO(hugo) : Maybe cache the result if time-critical ?
 	kings_positions KingsPositions = FindKingsPositions(ChessContext->Chessboard);
+	// TODO(hugo) : Non-cache friendly traversal of the chessboard
 	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 	{
 		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
@@ -871,17 +909,54 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 	Assert(MoveSentinel);
 	Assert(Piece);
 	board_tile* Chessboard = ChessContext->Chessboard;
+	piece_color PlayerMovingColor = Piece->Color;
 	tile_list* PreviousMove = 0;
 	for(tile_list* CurrentMove = *MoveSentinel; CurrentMove; CurrentMove = CurrentMove->Next)
 	{
-		// TODO(hugo) : Are we sure that we do not need to test the MoveType ?
-		Assert(CurrentMove->MoveType == MoveType_Regular);
 		bool DeleteMove = false;
 
 		v2i PieceDest = CurrentMove->P;
 		chess_piece* OldPieceAtDestSave = Chessboard[BOARD_COORD(PieceDest)];
-		Chessboard[BOARD_COORD(PieceP)] = 0;
-		Chessboard[BOARD_COORD(PieceDest)] = Piece;
+
+		// NOTE(hugo) : Apply the move
+		switch(CurrentMove->MoveType)
+		{
+			case MoveType_Regular:
+				{
+					Chessboard[BOARD_COORD(PieceP)] = 0;
+					Chessboard[BOARD_COORD(PieceDest)] = Piece;
+				} break;
+
+			case MoveType_CastlingQueenSide:
+				{
+					s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+					chess_piece* QueenRook = Chessboard[BOARD_COORD(V2i(0, LineIndex))];
+					Assert(QueenRook->Type == PieceType_Rook);
+					Chessboard[BOARD_COORD(PieceP)] = 0;
+					Assert(Chessboard[BOARD_COORD(PieceDest)] == 0);
+					Chessboard[BOARD_COORD(PieceDest)] = Piece;
+					Chessboard[BOARD_COORD(V2i(0, LineIndex))] = 0;
+					Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
+
+					// NOTE(hugo) : We do not do this is because it is just a test and does not affect the chess context
+					//ChessContext->CastlingPieceTracker[PlayerMovingColor].KingHasMoved = true;
+					//ChessContext->CastlingPieceTracker[PlayerMovingColor].QueenRook.HasMoved = true;
+				} break;
+
+			case MoveType_CastlingKingSide:
+				{
+					s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+					chess_piece* KingRook = Chessboard[BOARD_COORD(V2i(7, LineIndex))];
+					Assert(KingRook->Type == PieceType_Rook);
+					Chessboard[BOARD_COORD(PieceP)] = 0;
+					Assert(Chessboard[BOARD_COORD(PieceDest)] == 0);
+					Chessboard[BOARD_COORD(PieceDest)] = Piece;
+					Chessboard[BOARD_COORD(V2i(7, LineIndex))] = 0;
+					Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
+				} break;
+
+			InvalidDefaultCase;
+		}
 
 		player_select NewCheckPlayer = SearchForKingCheck(ChessContext, Arena);
 		if(IsPlayerUnderCheck(CheckPlayer, NewCheckPlayer))
@@ -898,8 +973,39 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 		}
 
 		// NOTE(hugo) : Putting it back like it was before
-		Chessboard[BOARD_COORD(PieceP)] = Piece;
-		Chessboard[BOARD_COORD(PieceDest)] = OldPieceAtDestSave;
+		switch(CurrentMove->MoveType)
+		{
+			case MoveType_Regular:
+				{
+					Chessboard[BOARD_COORD(PieceP)] = Piece;
+					Chessboard[BOARD_COORD(PieceDest)] = OldPieceAtDestSave;
+				} break;
+
+			case MoveType_CastlingQueenSide:
+				{
+					s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+					chess_piece* QueenRook = Chessboard[BOARD_COORD(V2i(3, LineIndex))];
+					Assert(QueenRook->Type == PieceType_Rook);
+					Chessboard[BOARD_COORD(PieceP)] = Piece;
+					Chessboard[BOARD_COORD(PieceDest)] = 0;
+					Chessboard[BOARD_COORD(V2i(3, LineIndex))] = 0;
+					Chessboard[BOARD_COORD(V2i(0, LineIndex))] = QueenRook;
+				} break;
+
+			case MoveType_CastlingKingSide:
+				{
+					s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+					chess_piece* KingRook = Chessboard[BOARD_COORD(V2i(5, LineIndex))];
+					Assert(KingRook->Type == PieceType_Rook);
+					Chessboard[BOARD_COORD(PieceP)] = Piece;
+					Chessboard[BOARD_COORD(PieceDest)] = 0;
+					Chessboard[BOARD_COORD(V2i(5, LineIndex))] = 0;
+					Chessboard[BOARD_COORD(V2i(7, LineIndex))] = KingRook;
+				} break;
+
+			InvalidDefaultCase;
+
+		}
 
 		if(!DeleteMove)
 		{
@@ -1045,14 +1151,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			ClearTileHighlighted(GameState);
 
 			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-			tile_list* AttackingTileList = GetAttackingTileList(&GameState->ChessContext, Piece, 
+			tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
 					GameState->ClickedTile, &GameState->GameArena);
-			if(AttackingTileList)
+			if(PossibleMoveList)
 			{
-				DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &AttackingTileList, GameState->PlayerToPlay, &GameState->GameArena);
+				DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->PlayerToPlay, &GameState->GameArena);
 			}
 
-			HighlightPossibleMoves(GameState, AttackingTileList);
+			HighlightPossibleMoves(GameState, PossibleMoveList);
 			EndTemporaryMemory(HighlightingTileTempMemory);
 
 
