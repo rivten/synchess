@@ -1066,12 +1066,15 @@ IsDraw(game_state* GameState)
 	*/
 
 	bool DrawCaseFound = false;
+	// TODO(hugo) : Check for right to castle or capture en passant
 
 	// NOTE(hugo) : Checking for threefold repetition
-	// TODO(hugo) : Check for right to castle or capture en passant
-	chessboard_config CurrentConfig = WriteConfig(GameState->ChessContext.Chessboard);
+	// NOTE(hugo) : Since the current configuration was added 
+	// before checking for the draw, the current config is just the
+	// sentinel of the current context
+	chessboard_config CurrentConfig = GameState->ChessContext.ChessboardConfigSentinel->Config;
 	u32 ConfigMatchCounter = 0;
-	for(chessboard_config_list* CurrentTestConfig = GameState->ChessContext.ChessboardConfigSentinel;
+	for(chessboard_config_list* CurrentTestConfig = GameState->ChessContext.ChessboardConfigSentinel->Next;
 			!DrawCaseFound && CurrentTestConfig;
 			CurrentTestConfig = CurrentTestConfig->Next)
 	{
