@@ -57,6 +57,8 @@ enum move_type
 	MoveType_Count,
 };
 
+// TODO(hugo) : We should make sure the rook is also still
+// there and have not been eaten by the other player
 struct castling_rook_tracker
 {
 	bool IsFirstRank;

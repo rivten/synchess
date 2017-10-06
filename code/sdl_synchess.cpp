@@ -1174,18 +1174,94 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			{
 				// NOTE(hugo): Make the intended move effective
 				// if the player selects a valid tile
-				if(ClickMoveType == MoveType_Regular)
+				switch(ClickMoveType)
 				{
-					chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
-					Assert(SelectedPiece);
-					GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
-					GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
-					// TODO(hugo) : Make sure we chage the castling_state
-					// of the player if a rook or the king is moved
-					// maybe a possibility to do this efficiently would be :
-					// in the chess_game_context track the exact location
-					// of each piece (or a pointer to them) so that,
-					// if a pawn is promoted to a tower, we don't have issues
+					case MoveType_Regular:
+						{
+							chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+							Assert(SelectedPiece);
+							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
+							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+
+							// TODO(hugo) : Make sure we chage the castling_state
+							// of the player if a rook or the king is moved
+							// maybe a possibility to do this efficiently would be :
+							// in the chess_game_context track the exact location
+							// of each piece (or a pointer to them) so that,
+							// if a pawn is promoted to a tower, we don't have issues
+							// TODO(hugo) : NOTE(hugo) : This is not fully exhaustive because it does not take into account the fact
+							// that a rook could have been into.
+							// What I mean is that we don't need to have an exact castling_piece_tracker since, if some parameters are
+							// correct, then the castling will be disabled for a player. Therefore it is useless to have the other
+							// parameters be exact since the firsts are already meaningful to the decision.
+							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+							if(SelectedPiece->Type == PieceType_King)
+							{
+								CastlingPieceTrackerPlayer->KingHasMoved = true;
+							}
+							if(SelectedPiece->Type == PieceType_Rook)
+							{
+								v2i SelectedPieceP = GameState->SelectedPieceP;
+								if((SelectedPieceP.x == 0) &&
+										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+								{
+									CastlingPieceTrackerPlayer->QueenRook.HasMoved = true;
+								}
+								else if((SelectedPieceP.x == 7) &&
+										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+								{
+									CastlingPieceTrackerPlayer->KingRook.HasMoved = true;
+								}
+							}
+						} break;
+					case MoveType_CastlingKingSide:
+						{
+							piece_color PlayerMovingColor = GameState->PlayerToPlay;
+							s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+							chess_piece* KingRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))];
+							Assert(KingRook->Type == PieceType_Rook);
+							v2i PieceP = GameState->SelectedPieceP;
+							v2i PieceDestP = GameState->ClickedTile;
+							chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
+							Assert(King->Type == PieceType_King);
+							GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+							Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
+							GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
+							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))] = 0;
+							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
+
+							// NOTE(hugo) : Disabling future castling possibilities
+							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+							CastlingPieceTrackerPlayer->KingHasMoved = true;
+						} break;
+					case MoveType_CastlingQueenSide:
+						{
+							piece_color PlayerMovingColor = GameState->PlayerToPlay;
+							s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+							chess_piece* QueenRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))];
+							Assert(QueenRook->Type == PieceType_Rook);
+							v2i PieceP = GameState->SelectedPieceP;
+							v2i PieceDestP = GameState->ClickedTile;
+							chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
+							Assert(King->Type == PieceType_King);
+							GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+							Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
+							GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
+							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))] = 0;
+							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
+
+							// NOTE(hugo) : Disabling future castling possibilities
+							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+							CastlingPieceTrackerPlayer->KingHasMoved = true;
+						} break;
+					case MoveType_EnPassant:
+						{
+							// TODO(hugo): Implement
+							InvalidCodePath;
+						} break;
+					InvalidDefaultCase;
 				}
 
 				// NOTE(hugo): Update the config list
