@@ -46,6 +46,7 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 	PLACE_PIECE_AT(6, 5, Queen, White);
 	PLACE_PIECE_AT(4, 6, King, White);
 	PLACE_PIECE_AT(7, 7, King, Black);
+	PLACE_PIECE_AT(0, 6, Pawn, White);
 #endif
 }
 
@@ -847,4 +848,3 @@ InitialiseChessContext(chess_game_context* ChessContext, memory_arena* Arena)
 	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.IsFirstRank = (BlackKingRook && BlackKingRook->Type == PieceType_Rook && BlackKingRook->Color == PieceColor_Black);
 	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.HasMoved = false;
 }
-

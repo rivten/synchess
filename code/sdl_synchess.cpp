@@ -395,6 +395,15 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 							Assert(SelectedPiece);
 							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+							if((SelectedPiece->Type == PieceType_Pawn) && 
+									((GameState->PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
+									  (GameState->PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
+							{
+								chess_piece* PromotedPawn = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+								// TODO(hugo) : We automatically promote to queen. Let the player choose.
+								PromotedPawn->Type = PieceType_Queen;
+							}
+
 
 							// TODO(hugo) : Make sure we chage the castling_state
 							// of the player if a rook or the king is moved
