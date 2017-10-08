@@ -53,6 +53,7 @@ enum move_type
 	MoveType_CastlingKingSide,
 	MoveType_CastlingQueenSide,
 	MoveType_EnPassant,
+	MoveType_DoubleStepPawn,
 
 	MoveType_Count,
 };
@@ -72,6 +73,7 @@ struct castling_piece_tracker
 	castling_rook_tracker KingRook;
 };
 
+#define NO_PREVIOUS_DOUBLE_STEP 8
 struct chess_game_context
 {
 	board_tile Chessboard[64];
@@ -80,6 +82,7 @@ struct chess_game_context
 
 	player_select PlayerCheck;
 
+	u32 LastDoubleStepCol;
 };
 
 struct game_state

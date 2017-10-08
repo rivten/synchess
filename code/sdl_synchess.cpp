@@ -389,6 +389,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				switch(ClickMoveType)
 				{
 					case MoveType_Regular:
+					case MoveType_DoubleStepPawn:
 						{
 							chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
 							chess_piece* EatenPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
@@ -496,11 +497,39 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 						} break;
 					case MoveType_EnPassant:
 						{
-							// TODO(hugo): Implement
-							InvalidCodePath;
+							chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+							Assert(SelectedPiece);
+							piece_color PlayerMovingColor = GameState->PlayerToPlay;
+							v2i PieceDestP = GameState->ClickedTile;
+							v2i PieceP = GameState->SelectedPieceP;
+							if(PlayerMovingColor == PieceColor_White)
+							{
+								Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
+								Assert(PieceDestP.y == 5);
+								Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5]);
+
+								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 4] = 0;
+								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5] = SelectedPiece;
+								GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+							}
+							else if(PlayerMovingColor == PieceColor_Black)
+							{
+								Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
+								Assert(PieceDestP.y == 2);
+								Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2]);
+
+								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 3] = 0;
+								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2] = SelectedPiece;
+								GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+							}
+							else
+							{
+								InvalidCodePath;
+							}
 						} break;
 					InvalidDefaultCase;
 				}
+				GameState->ChessContext.LastDoubleStepCol = (ClickMoveType == MoveType_DoubleStepPawn) ? GameState->ClickedTile.x : NO_PREVIOUS_DOUBLE_STEP;
 
 				// NOTE(hugo): Update the config list
 				chessboard_config_list* NewChessboardConfigList = 

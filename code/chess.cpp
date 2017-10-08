@@ -184,7 +184,20 @@ GetAttackingTileList(chess_game_context* ChessContext, chess_piece* Piece,
 				if((PieceP.y == 1) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y + 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y + 2);
-					ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
+					if(IsInsideBoard(P) && (!ContainsPiece(Chessboard, P))) 
+					{
+						AddTile(&Sentinel, P, MoveType_DoubleStepPawn, Arena);
+					}
+				}
+
+				if((PieceP.y == 4) && (ChessContext->LastDoubleStepCol != NO_PREVIOUS_DOUBLE_STEP))
+				{
+					s32 PawnXDiffs = PieceP.x - ChessContext->LastDoubleStepCol;
+					if(PawnXDiffs == +1 || PawnXDiffs == -1)
+					{
+						P = V2i(ChessContext->LastDoubleStepCol, 5);
+						AddTile(&Sentinel, P, MoveType_EnPassant, Arena);
+					}
 				}
 			}
 			else if(Piece->Color == PieceColor_Black)
@@ -201,7 +214,20 @@ GetAttackingTileList(chess_game_context* ChessContext, chess_piece* Piece,
 				if((PieceP.y == 6) && !ContainsPiece(Chessboard, V2i(PieceP.x, PieceP.y - 1)))
 				{
 					P = V2i(PieceP.x, PieceP.y - 2);
-					ADD_REGULAR_MOVE_IF_IN_BOARD_AND_NO_PIECE(P);
+					if(IsInsideBoard(P) && (!ContainsPiece(Chessboard, P))) 
+					{
+						AddTile(&Sentinel, P, MoveType_DoubleStepPawn, Arena);
+					}
+				}
+
+				if((PieceP.y == 3) && (ChessContext->LastDoubleStepCol != NO_PREVIOUS_DOUBLE_STEP))
+				{
+					s32 PawnXDiffs = PieceP.x - ChessContext->LastDoubleStepCol;
+					if(PawnXDiffs == +1 || PawnXDiffs == -1)
+					{
+						P = V2i(ChessContext->LastDoubleStepCol, 2);
+						AddTile(&Sentinel, P, MoveType_EnPassant, Arena);
+					}
 				}
 			}
 			else
@@ -647,6 +673,7 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 		switch(CurrentMove->MoveType)
 		{
 			case MoveType_Regular:
+			case MoveType_DoubleStepPawn:
 				{
 					Chessboard[BOARD_COORD(PieceP)] = 0;
 					Chessboard[BOARD_COORD(PieceDest)] = Piece;
@@ -680,6 +707,46 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 					Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
 				} break;
 
+			case MoveType_EnPassant:
+				{
+					if(PlayerMovingColor == PieceColor_White)
+					{
+						Assert(u32(PieceDest.x) == ChessContext->LastDoubleStepCol);
+						Assert(PieceDest.y == 5);
+						Assert(!Chessboard[ChessContext->LastDoubleStepCol + 8 * 5]);
+
+						OldPieceAtDestSave = Chessboard[ChessContext->LastDoubleStepCol + 8 * 4];
+
+						Assert(OldPieceAtDestSave);
+						Assert(OldPieceAtDestSave->Type == PieceType_Pawn);
+						Assert(OldPieceAtDestSave->Color == PieceColor_Black);
+
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 4] = 0;
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 5] = Piece;
+						Chessboard[BOARD_COORD(PieceP)] = 0;
+					}
+					else if(PlayerMovingColor == PieceColor_Black)
+					{
+						Assert(u32(PieceDest.x) == ChessContext->LastDoubleStepCol);
+						Assert(PieceDest.y == 2);
+						Assert(!Chessboard[ChessContext->LastDoubleStepCol + 8 * 2]);
+
+						OldPieceAtDestSave = Chessboard[ChessContext->LastDoubleStepCol + 8 * 3];
+
+						Assert(OldPieceAtDestSave);
+						Assert(OldPieceAtDestSave->Type == PieceType_Pawn);
+						Assert(OldPieceAtDestSave->Color == PieceColor_White);
+
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 3] = 0;
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 2] = Piece;
+						Chessboard[BOARD_COORD(PieceP)] = 0;
+					}
+					else
+					{
+						InvalidCodePath;
+					}
+				} break;
+
 			InvalidDefaultCase;
 		}
 
@@ -701,6 +768,7 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 		switch(CurrentMove->MoveType)
 		{
 			case MoveType_Regular:
+			case MoveType_DoubleStepPawn:
 				{
 					Chessboard[BOARD_COORD(PieceP)] = Piece;
 					Chessboard[BOARD_COORD(PieceDest)] = OldPieceAtDestSave;
@@ -726,6 +794,25 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 					Chessboard[BOARD_COORD(PieceDest)] = 0;
 					Chessboard[BOARD_COORD(V2i(5, LineIndex))] = 0;
 					Chessboard[BOARD_COORD(V2i(7, LineIndex))] = KingRook;
+				} break;
+			case MoveType_EnPassant:
+				{
+					if(PlayerMovingColor == PieceColor_White)
+					{
+						Chessboard[BOARD_COORD(PieceP)] = Piece;
+						Chessboard[BOARD_COORD(PieceDest)] = 0;
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 4] = OldPieceAtDestSave;
+					}
+					else if(PlayerMovingColor == PieceColor_Black)
+					{
+						Chessboard[BOARD_COORD(PieceP)] = Piece;
+						Chessboard[BOARD_COORD(PieceDest)] = 0;
+						Chessboard[ChessContext->LastDoubleStepCol + 8 * 3] = OldPieceAtDestSave;
+					}
+					else
+					{
+						InvalidCodePath;
+					}
 				} break;
 
 			InvalidDefaultCase;
