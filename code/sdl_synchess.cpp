@@ -215,9 +215,9 @@ internal chessboard_config
 WriteConfig(board_tile* Chessboard)
 {
 	chessboard_config Result = {};
-	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 	{
-		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 		{
 			u32 SquareIndex = SquareX + 8 * SquareY;
 			Result.Tiles[SquareIndex] = u8(0x0000);
@@ -631,7 +631,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	// TODO(hugo) : Should the window be resizable ?
 	u32 WindowFlags = SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE;
 
-	SDL_Window* Window = SDL_CreateWindow("The Road East", 
+	SDL_Window* Window = SDL_CreateWindow("synchess @ rivten", 
 			SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
 			GlobalWindowWidth, GlobalWindowHeight, WindowFlags);
 	Assert(Window);

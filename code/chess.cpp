@@ -393,10 +393,9 @@ IsChessboardCleanForCastling(chess_game_context* ChessContext, piece_color Color
 	}
 #endif
 
-	// TODO(hugo) : Non-cache friendly traversal of the chessboard
-	for(u32 SquareX = 0; IsClean && (SquareX < 8); ++SquareX)
+	for(u32 SquareY = 0; IsClean && (SquareY < 8); ++SquareY)
 	{
-		for(u32 SquareY = 0; IsClean && (SquareY < 8); ++SquareY)
+		for(u32 SquareX = 0; IsClean && (SquareX < 8); ++SquareX)
 		{
 			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
 			if(Piece && (Piece->Color == OtherColor(Color)))
@@ -542,10 +541,9 @@ kings_positions FindKingsPositions(board_tile* Chessboard)
 {
 	bool OneKingFound = false;
 	kings_positions Result = {};
-	// TODO(hugo) : Non-cache friendly traversal of the chessboard
-	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 	{
-		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 		{
 			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
@@ -577,10 +575,9 @@ SearchForKingCheck(chess_game_context* ChessContext, memory_arena* Arena)
 
 	// TODO(hugo) : Maybe cache the result if time-critical ?
 	kings_positions KingsPositions = FindKingsPositions(ChessContext->Chessboard);
-	// TODO(hugo) : Non-cache friendly traversal of the chessboard
-	for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
 	{
-		for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 		{
 			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
@@ -616,9 +613,9 @@ IsPlayerCheckmate(chess_game_context* ChessContext, piece_color PlayerColor, mem
 {
 	board_tile* Chessboard = ChessContext->Chessboard;
 	bool SavingMoveFound = false;
-	for(u32 SquareX = 0; (!SavingMoveFound) && (SquareX < 8); ++SquareX)
+	for(u32 SquareY = 0; (!SavingMoveFound) && (SquareY < 8); ++SquareY)
 	{
-		for(u32 SquareY = 0; (!SavingMoveFound) && (SquareY < 8); ++SquareY)
+		for(u32 SquareX = 0; (!SavingMoveFound) && (SquareX < 8); ++SquareX)
 		{
 			chess_piece* Piece = Chessboard[SquareX + 8 * SquareY];
 			if(Piece && (Piece->Color == PlayerColor))
