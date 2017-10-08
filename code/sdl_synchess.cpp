@@ -504,7 +504,11 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 				// NOTE(hugo) : Resolve situation for the other player
 				GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
-				bool IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+				bool IsCurrentPlayerCheckmate = false;
+				if(IsPlayerUnderCheck(OtherColor(GameState->PlayerToPlay), GameState->ChessContext.PlayerCheck))
+				{
+					IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+				}
 				if(IsCurrentPlayerCheckmate)
 				{
 					printf("Checkmate !!\n");

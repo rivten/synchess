@@ -12,6 +12,7 @@
 internal void
 InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 {
+#if 1
 	// NOTE(hugo) : White setup
 	PLACE_PIECE_AT(0, 0, Rook, White);
 	PLACE_PIECE_AT(1, 0, Knight, White);
@@ -41,6 +42,11 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 	{
 		PLACE_PIECE_AT(RowIndex, 6, Pawn, Black);
 	}
+#else
+	PLACE_PIECE_AT(6, 5, Queen, White);
+	PLACE_PIECE_AT(4, 6, King, White);
+	PLACE_PIECE_AT(7, 7, King, Black);
+#endif
 }
 
 internal bool
@@ -753,6 +759,42 @@ IsDraw(game_state* GameState)
 	bool DrawCaseFound = false;
 	// TODO(hugo) : Check for right to castle or capture en passant
 
+	// NOTE(hugo) : Checking for stalemate
+	bool ValidMoveFoundForCurrentPlayer = false;
+	piece_color CurrentPlayer = OtherColor(GameState->PlayerToPlay); // NOTE(hugo) : We check the next player to play
+	for(u32 SquareY = 0; !ValidMoveFoundForCurrentPlayer && (SquareY < 8); ++SquareY)
+	{
+		for(u32 SquareX = 0; !ValidMoveFoundForCurrentPlayer && (SquareX < 8); ++SquareX)
+		{
+			chess_piece* Piece = GameState->ChessContext.Chessboard[SquareX + 8 * SquareY];
+			if(Piece && Piece->Color == CurrentPlayer)
+			{
+				temporary_memory AttackingListTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+
+				tile_list* AttackingTileList = GetAttackingTileList(&GameState->ChessContext, 
+						Piece, V2i(SquareX, SquareY), &GameState->GameArena);
+				if(AttackingTileList)
+				{
+					DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, V2i(SquareX, SquareY),
+							&AttackingTileList, CurrentPlayer, &GameState->GameArena);
+				}
+				if(AttackingTileList)
+				{
+					// NOTE(hugo): If there is still at least a move after this, 
+					// then we have found a valid move.
+					ValidMoveFoundForCurrentPlayer = true;
+				}
+
+				EndTemporaryMemory(AttackingListTempMemory);
+			}
+		}
+	}
+
+	if(!ValidMoveFoundForCurrentPlayer)
+	{
+		DrawCaseFound = true;
+	}
+
 	// NOTE(hugo) : Checking for threefold repetition
 	// NOTE(hugo) : Since the current configuration was added 
 	// before checking for the draw, the current config is just the
@@ -785,16 +827,24 @@ InitialiseChessContext(chess_game_context* ChessContext, memory_arena* Arena)
 	InitialiseChessboard(ChessContext->Chessboard, Arena);
 	ChessContext->ChessboardConfigSentinel = 0;
 
+	// NOTE(hugo) : We need to check that we are not in a custom config.
+	chess_piece* WhiteKingRook = ChessContext->Chessboard[0 + 8 * 0];
+	chess_piece* BlackKingRook = ChessContext->Chessboard[0 + 8 * 7];
+	chess_piece* BlackQueenRook = ChessContext->Chessboard[7 + 8 * 7];
+
 	ChessContext->CastlingPieceTracker[PieceColor_White].KingHasMoved = false;
-	ChessContext->CastlingPieceTracker[PieceColor_White].QueenRook.IsFirstRank = true;
+
+	chess_piece* WhiteQueenRook = ChessContext->Chessboard[7 + 8 * 0];
+	ChessContext->CastlingPieceTracker[PieceColor_White].QueenRook.IsFirstRank = (WhiteQueenRook && WhiteQueenRook->Type == PieceType_Rook && WhiteQueenRook->Color == PieceColor_White);
 	ChessContext->CastlingPieceTracker[PieceColor_White].QueenRook.HasMoved = false;
-	ChessContext->CastlingPieceTracker[PieceColor_White].KingRook.IsFirstRank = true;
+
+	ChessContext->CastlingPieceTracker[PieceColor_White].KingRook.IsFirstRank = (WhiteKingRook && WhiteKingRook->Type == PieceType_Rook && WhiteKingRook->Color == PieceColor_White);
 	ChessContext->CastlingPieceTracker[PieceColor_White].KingRook.HasMoved = false;
 
 	ChessContext->CastlingPieceTracker[PieceColor_Black].KingHasMoved = false;
-	ChessContext->CastlingPieceTracker[PieceColor_Black].QueenRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].QueenRook.IsFirstRank = (BlackQueenRook && BlackQueenRook->Type == PieceType_Rook && BlackQueenRook->Color == PieceColor_Black);
 	ChessContext->CastlingPieceTracker[PieceColor_Black].QueenRook.HasMoved = false;
-	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.IsFirstRank = true;
+	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.IsFirstRank = (BlackKingRook && BlackKingRook->Type == PieceType_Rook && BlackKingRook->Color == PieceColor_Black);
 	ChessContext->CastlingPieceTracker[PieceColor_Black].KingRook.HasMoved = false;
 }
 
