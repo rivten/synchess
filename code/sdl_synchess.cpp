@@ -346,6 +346,8 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		InitialiseArena(&GameState->GameArena, GameArenaSize, GameArenaMemoryBase);
 		InitialiseChessContext(&GameState->ChessContext, &GameState->GameArena);
 
+		GameState->UserMode = UserMode_MakeMove;
+
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
@@ -356,215 +358,255 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 	// NOTE(hugo) : Game update
 	// {
-	if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+	switch(GameState->UserMode)
 	{
-		GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
-		Assert(IsInsideBoard(GameState->ClickedTile));
-		chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-		if(Piece && (Piece->Color == GameState->PlayerToPlay))
-		{
-			ClearTileHighlighted(GameState);
-
-			temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-			tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
-					GameState->ClickedTile, &GameState->GameArena);
-			if(PossibleMoveList)
+		case UserMode_MakeMove:
 			{
-				DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->PlayerToPlay, &GameState->GameArena);
-			}
+				if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+				{
+					GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
+					Assert(IsInsideBoard(GameState->ClickedTile));
+					chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+					if(Piece && (Piece->Color == GameState->PlayerToPlay))
+					{
+						ClearTileHighlighted(GameState);
 
-			HighlightPossibleMoves(GameState, PossibleMoveList);
-			EndTemporaryMemory(HighlightingTileTempMemory);
+						temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+						tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
+								GameState->ClickedTile, &GameState->GameArena);
+						if(PossibleMoveList)
+						{
+							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->PlayerToPlay, &GameState->GameArena);
+						}
+
+						HighlightPossibleMoves(GameState, PossibleMoveList);
+						EndTemporaryMemory(HighlightingTileTempMemory);
 
 
-			GameState->SelectedPieceP = GameState->ClickedTile;
-		}
-		else
-		{
-			move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
-			if(ClickMoveType != MoveType_None)
+						GameState->SelectedPieceP = GameState->ClickedTile;
+					}
+					else
+					{
+						move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
+						if(ClickMoveType != MoveType_None)
+						{
+							// NOTE(hugo): Make the intended move effective
+							// if the player selects a valid tile
+							switch(ClickMoveType)
+							{
+								case MoveType_Regular:
+								case MoveType_DoubleStepPawn:
+									{
+										chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+										chess_piece* EatenPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+										Assert(SelectedPiece);
+										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
+										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
+										if((SelectedPiece->Type == PieceType_Pawn) && 
+												((GameState->PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
+												  (GameState->PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
+										{
+											chess_piece* PromotedPawn = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+											GameState->UserMode = UserMode_PromotePawn;
+											GameState->PawnToPromote = PromotedPawn;
+										}
+
+
+										// TODO(hugo) : Make sure we chage the castling_state
+										// of the player if a rook or the king is moved
+										// maybe a possibility to do this efficiently would be :
+										// in the chess_game_context track the exact location
+										// of each piece (or a pointer to them) so that,
+										// if a pawn is promoted to a tower, we don't have issues
+										// TODO(hugo) : NOTE(hugo) : This is not fully exhaustive because it does not take into account the fact
+										// that a rook could have been into.
+										// What I mean is that we don't need to have an exact castling_piece_tracker since, if some parameters are
+										// correct, then the castling will be disabled for a player. Therefore it is useless to have the other
+										// parameters be exact since the firsts are already meaningful to the decision.
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										if(SelectedPiece->Type == PieceType_King)
+										{
+											CastlingPieceTrackerPlayer->KingHasMoved = true;
+										}
+										if(SelectedPiece->Type == PieceType_Rook)
+										{
+											v2i SelectedPieceP = GameState->SelectedPieceP;
+											if((SelectedPieceP.x == 0) &&
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+											{
+												CastlingPieceTrackerPlayer->QueenRook.HasMoved = true;
+											}
+											else if((SelectedPieceP.x == 7) &&
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+											{
+												CastlingPieceTrackerPlayer->KingRook.HasMoved = true;
+											}
+										}
+										if(EatenPiece && EatenPiece->Type == PieceType_Rook)
+										{
+											v2i SelectedPieceP = GameState->ClickedTile;
+											if((SelectedPieceP.x == 0) &&
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+											{
+												CastlingPieceTrackerPlayer->QueenRook.IsFirstRank = true;
+											}
+											else if((SelectedPieceP.x == 7) &&
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+											{
+												CastlingPieceTrackerPlayer->KingRook.IsFirstRank = true;
+											}
+										}
+									} break;
+								case MoveType_CastlingKingSide:
+									{
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+										chess_piece* KingRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))];
+										Assert(KingRook->Type == PieceType_Rook);
+										v2i PieceP = GameState->SelectedPieceP;
+										v2i PieceDestP = GameState->ClickedTile;
+										chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
+										Assert(King->Type == PieceType_King);
+										GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+										Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
+										GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
+										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))] = 0;
+										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
+
+										// NOTE(hugo) : Disabling future castling possibilities
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										CastlingPieceTrackerPlayer->KingHasMoved = true;
+									} break;
+								case MoveType_CastlingQueenSide:
+									{
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
+										chess_piece* QueenRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))];
+										Assert(QueenRook->Type == PieceType_Rook);
+										v2i PieceP = GameState->SelectedPieceP;
+										v2i PieceDestP = GameState->ClickedTile;
+										chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
+										Assert(King->Type == PieceType_King);
+										GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+										Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
+										GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
+										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))] = 0;
+										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
+
+										// NOTE(hugo) : Disabling future castling possibilities
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										CastlingPieceTrackerPlayer->KingHasMoved = true;
+									} break;
+								case MoveType_EnPassant:
+									{
+										chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
+										Assert(SelectedPiece);
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										v2i PieceDestP = GameState->ClickedTile;
+										v2i PieceP = GameState->SelectedPieceP;
+										if(PlayerMovingColor == PieceColor_White)
+										{
+											Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
+											Assert(PieceDestP.y == 5);
+											Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5]);
+
+											GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 4] = 0;
+											GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5] = SelectedPiece;
+											GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+										}
+										else if(PlayerMovingColor == PieceColor_Black)
+										{
+											Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
+											Assert(PieceDestP.y == 2);
+											Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2]);
+
+											GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 3] = 0;
+											GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2] = SelectedPiece;
+											GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
+										}
+										else
+										{
+											InvalidCodePath;
+										}
+									} break;
+								InvalidDefaultCase;
+							}
+							GameState->ChessContext.LastDoubleStepCol = (ClickMoveType == MoveType_DoubleStepPawn) ? GameState->ClickedTile.x : NO_PREVIOUS_DOUBLE_STEP;
+
+							// NOTE(hugo): Update the config list
+							chessboard_config_list* NewChessboardConfigList = 
+								PushStruct(&GameState->GameArena, chessboard_config_list);
+							NewChessboardConfigList->Config = WriteConfig(GameState->ChessContext.Chessboard);
+							NewChessboardConfigList->Next = GameState->ChessContext.ChessboardConfigSentinel;
+							GameState->ChessContext.ChessboardConfigSentinel = NewChessboardConfigList;
+
+							ClearTileHighlighted(GameState);
+
+							// NOTE(hugo) : Resolve situation for the other player
+							GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
+							bool IsCurrentPlayerCheckmate = false;
+							if(IsPlayerUnderCheck(OtherColor(GameState->PlayerToPlay), GameState->ChessContext.PlayerCheck))
+							{
+								IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+							}
+							if(IsCurrentPlayerCheckmate)
+							{
+								printf("Checkmate !!\n");
+								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
+							}
+							else if(IsDraw(GameState))
+							{
+								printf("PAT !!\n");
+								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
+							}
+
+							GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
+						}
+					}
+				}
+				if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
+				{
+					ClearTileHighlighted(GameState);
+				}
+			} break;
+		case UserMode_PromotePawn:
 			{
-				// NOTE(hugo): Make the intended move effective
-				// if the player selects a valid tile
-				switch(ClickMoveType)
+				Assert(GameState->PawnToPromote);
+
+				bool PromotionChosen = false;
+				if(Pressed(Input->Keyboard.Buttons[SCANCODE_Q]))
 				{
-					case MoveType_Regular:
-					case MoveType_DoubleStepPawn:
-						{
-							chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
-							chess_piece* EatenPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-							Assert(SelectedPiece);
-							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
-							GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
-							if((SelectedPiece->Type == PieceType_Pawn) && 
-									((GameState->PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
-									  (GameState->PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
-							{
-								chess_piece* PromotedPawn = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-								// TODO(hugo) : We automatically promote to queen. Let the player choose.
-								PromotedPawn->Type = PieceType_Queen;
-							}
-
-
-							// TODO(hugo) : Make sure we chage the castling_state
-							// of the player if a rook or the king is moved
-							// maybe a possibility to do this efficiently would be :
-							// in the chess_game_context track the exact location
-							// of each piece (or a pointer to them) so that,
-							// if a pawn is promoted to a tower, we don't have issues
-							// TODO(hugo) : NOTE(hugo) : This is not fully exhaustive because it does not take into account the fact
-							// that a rook could have been into.
-							// What I mean is that we don't need to have an exact castling_piece_tracker since, if some parameters are
-							// correct, then the castling will be disabled for a player. Therefore it is useless to have the other
-							// parameters be exact since the firsts are already meaningful to the decision.
-							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
-							if(SelectedPiece->Type == PieceType_King)
-							{
-								CastlingPieceTrackerPlayer->KingHasMoved = true;
-							}
-							if(SelectedPiece->Type == PieceType_Rook)
-							{
-								v2i SelectedPieceP = GameState->SelectedPieceP;
-								if((SelectedPieceP.x == 0) &&
-										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
-								{
-									CastlingPieceTrackerPlayer->QueenRook.HasMoved = true;
-								}
-								else if((SelectedPieceP.x == 7) &&
-										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
-								{
-									CastlingPieceTrackerPlayer->KingRook.HasMoved = true;
-								}
-							}
-							if(EatenPiece && EatenPiece->Type == PieceType_Rook)
-							{
-								v2i SelectedPieceP = GameState->ClickedTile;
-								if((SelectedPieceP.x == 0) &&
-										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
-								{
-									CastlingPieceTrackerPlayer->QueenRook.IsFirstRank = true;
-								}
-								else if((SelectedPieceP.x == 7) &&
-										((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-										 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
-								{
-									CastlingPieceTrackerPlayer->KingRook.IsFirstRank = true;
-								}
-							}
-						} break;
-					case MoveType_CastlingKingSide:
-						{
-							piece_color PlayerMovingColor = GameState->PlayerToPlay;
-							s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
-							chess_piece* KingRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))];
-							Assert(KingRook->Type == PieceType_Rook);
-							v2i PieceP = GameState->SelectedPieceP;
-							v2i PieceDestP = GameState->ClickedTile;
-							chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
-							Assert(King->Type == PieceType_King);
-							GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
-							Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
-							GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
-							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))] = 0;
-							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
-
-							// NOTE(hugo) : Disabling future castling possibilities
-							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
-							CastlingPieceTrackerPlayer->KingHasMoved = true;
-						} break;
-					case MoveType_CastlingQueenSide:
-						{
-							piece_color PlayerMovingColor = GameState->PlayerToPlay;
-							s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
-							chess_piece* QueenRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))];
-							Assert(QueenRook->Type == PieceType_Rook);
-							v2i PieceP = GameState->SelectedPieceP;
-							v2i PieceDestP = GameState->ClickedTile;
-							chess_piece* King = GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)];
-							Assert(King->Type == PieceType_King);
-							GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
-							Assert(GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] == 0);
-							GameState->ChessContext.Chessboard[BOARD_COORD(PieceDestP)] = King;
-							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))] = 0;
-							GameState->ChessContext.Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
-
-							// NOTE(hugo) : Disabling future castling possibilities
-							castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
-							CastlingPieceTrackerPlayer->KingHasMoved = true;
-						} break;
-					case MoveType_EnPassant:
-						{
-							chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
-							Assert(SelectedPiece);
-							piece_color PlayerMovingColor = GameState->PlayerToPlay;
-							v2i PieceDestP = GameState->ClickedTile;
-							v2i PieceP = GameState->SelectedPieceP;
-							if(PlayerMovingColor == PieceColor_White)
-							{
-								Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
-								Assert(PieceDestP.y == 5);
-								Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5]);
-
-								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 4] = 0;
-								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 5] = SelectedPiece;
-								GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
-							}
-							else if(PlayerMovingColor == PieceColor_Black)
-							{
-								Assert(u32(PieceDestP.x) == GameState->ChessContext.LastDoubleStepCol);
-								Assert(PieceDestP.y == 2);
-								Assert(!GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2]);
-
-								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 3] = 0;
-								GameState->ChessContext.Chessboard[GameState->ChessContext.LastDoubleStepCol + 8 * 2] = SelectedPiece;
-								GameState->ChessContext.Chessboard[BOARD_COORD(PieceP)] = 0;
-							}
-							else
-							{
-								InvalidCodePath;
-							}
-						} break;
-					InvalidDefaultCase;
+					GameState->PawnToPromote->Type = PieceType_Queen;
+					PromotionChosen = true;
 				}
-				GameState->ChessContext.LastDoubleStepCol = (ClickMoveType == MoveType_DoubleStepPawn) ? GameState->ClickedTile.x : NO_PREVIOUS_DOUBLE_STEP;
-
-				// NOTE(hugo): Update the config list
-				chessboard_config_list* NewChessboardConfigList = 
-					PushStruct(&GameState->GameArena, chessboard_config_list);
-				NewChessboardConfigList->Config = WriteConfig(GameState->ChessContext.Chessboard);
-				NewChessboardConfigList->Next = GameState->ChessContext.ChessboardConfigSentinel;
-				GameState->ChessContext.ChessboardConfigSentinel = NewChessboardConfigList;
-
-				ClearTileHighlighted(GameState);
-
-				// NOTE(hugo) : Resolve situation for the other player
-				GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
-				bool IsCurrentPlayerCheckmate = false;
-				if(IsPlayerUnderCheck(OtherColor(GameState->PlayerToPlay), GameState->ChessContext.PlayerCheck))
+				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_R]))
 				{
-					IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+					GameState->PawnToPromote->Type = PieceType_Rook;
+					PromotionChosen = true;
 				}
-				if(IsCurrentPlayerCheckmate)
+				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_B]))
 				{
-					printf("Checkmate !!\n");
-					DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
+					GameState->PawnToPromote->Type = PieceType_Bishop;
+					PromotionChosen = true;
 				}
-				else if(IsDraw(GameState))
+				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_N]))
 				{
-					printf("PAT !!\n");
-					DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
+					GameState->PawnToPromote->Type = PieceType_Knight;
+					PromotionChosen = true;
 				}
 
-				GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
-			}
-		}
-	}
-	if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
-	{
-		ClearTileHighlighted(GameState);
+				if(PromotionChosen)
+				{
+					GameState->UserMode = UserMode_MakeMove;
+					GameState->PawnToPromote = 0;
+				}
+
+			} break;
+		InvalidDefaultCase;
 	}
 	// }
 

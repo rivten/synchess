@@ -85,6 +85,12 @@ struct chess_game_context
 	u32 LastDoubleStepCol;
 };
 
+enum user_mode
+{
+	UserMode_MakeMove,
+	UserMode_PromotePawn,
+};
+
 struct game_state
 {
 	renderer Renderer;
@@ -93,6 +99,9 @@ struct game_state
 	chess_game_context ChessContext;
 
 	u32 SquareSizeInPixels;
+
+	user_mode UserMode;
+	chess_piece* PawnToPromote;
 
 	move_type TileHighlighted[64];
 	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];

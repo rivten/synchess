@@ -12,7 +12,7 @@
 internal void
 InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 {
-#if 1
+#if 0
 	// NOTE(hugo) : White setup
 	PLACE_PIECE_AT(0, 0, Rook, White);
 	PLACE_PIECE_AT(1, 0, Knight, White);
@@ -45,7 +45,7 @@ InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
 #else
 	PLACE_PIECE_AT(6, 5, Queen, White);
 	PLACE_PIECE_AT(4, 6, King, White);
-	PLACE_PIECE_AT(7, 7, King, Black);
+	PLACE_PIECE_AT(7, 0, King, Black);
 	PLACE_PIECE_AT(0, 6, Pawn, White);
 #endif
 }
