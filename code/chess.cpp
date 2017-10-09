@@ -842,7 +842,123 @@ IsDraw(game_state* GameState)
 	*/
 
 	bool DrawCaseFound = false;
-	// TODO(hugo) : Check for right to castle or capture en passant
+
+	// NOTE(hugo) : Checking for no possibility of checkmate
+	// NOTE(hugo) : The following code is very verbose, but at least
+	// it's understandable.
+	bool WhiteDiagWhiteBishopPresent = false;
+	bool BlackDiagWhiteBishopPresent = false;
+	bool WhiteDiagBlackBishopPresent = false;
+	bool BlackDiagBlackBishopPresent = false;
+	u32 WhiteKnightPresent = 0;
+	u32 BlackKnightPresent = 0;
+	bool OneWhiteBishopPresent = false;
+	bool OneBlackBishopPresent = false;
+	bool PieceOtherThanKingBishopKnightPresent = false;
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+	{
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+		{
+			chess_piece* Piece = GameState->ChessContext.Chessboard[SquareX + 8 * SquareY];
+			if(Piece)
+			{
+				switch(Piece->Type)
+				{
+					case PieceType_Pawn:
+					case PieceType_Rook:
+					case PieceType_Queen:
+						{
+							PieceOtherThanKingBishopKnightPresent = true;
+						} break;
+					case PieceType_Knight:
+						{
+							if(Piece->Color == PieceColor_White)
+							{
+								++WhiteKnightPresent;
+							}
+							else if(Piece->Color == PieceColor_Black)
+							{
+								++BlackKnightPresent;
+							}
+							else
+							{
+								InvalidCodePath;
+							}
+						} break;
+					case PieceType_Bishop:
+						{
+							if(Piece->Color == PieceColor_White)
+							{
+								bool IsWhiteTile = (SquareX + SquareY) % 2 != 0;
+								if(IsWhiteTile)
+								{
+									WhiteDiagWhiteBishopPresent = true;
+								}
+								else
+								{
+									BlackDiagWhiteBishopPresent = true;
+								}
+							}
+							else if(Piece->Color == PieceColor_Black)
+							{
+								bool IsWhiteTile = (SquareX + SquareY) % 2 != 0;
+								if(IsWhiteTile)
+								{
+									WhiteDiagBlackBishopPresent = true;
+								}
+								else
+								{
+									BlackDiagBlackBishopPresent = true;
+								}
+							}
+							else
+							{
+								InvalidCodePath;
+							}
+						} break;
+					case PieceType_King:
+						{
+						} break;
+					InvalidDefaultCase;
+				}
+			}
+		}
+	}
+
+	OneBlackBishopPresent = (WhiteDiagBlackBishopPresent && !BlackDiagBlackBishopPresent) ||
+		(!WhiteDiagBlackBishopPresent && BlackDiagBlackBishopPresent);
+	OneWhiteBishopPresent = (WhiteDiagWhiteBishopPresent && !BlackDiagWhiteBishopPresent) ||
+		(!WhiteDiagWhiteBishopPresent && BlackDiagWhiteBishopPresent);
+	bool WhiteBishopPresent = WhiteDiagWhiteBishopPresent || BlackDiagWhiteBishopPresent;
+	bool BlackBishopPresent = WhiteDiagBlackBishopPresent || BlackDiagBlackBishopPresent;
+
+	bool KnightPresent = (WhiteKnightPresent > 0) && (BlackKnightPresent > 0);
+	bool BishopPresent = WhiteBishopPresent || BlackBishopPresent;
+
+	bool OnlyOneBishop = (WhiteBishopPresent && !BlackBishopPresent) ||
+		(BlackBishopPresent && !WhiteBishopPresent);
+
+	bool OnlyOneKnight = (WhiteKnightPresent + BlackKnightPresent == 1);
+
+	bool SameColorBishopPresent = (WhiteDiagWhiteBishopPresent && WhiteDiagBlackBishopPresent && (!BlackDiagWhiteBishopPresent) && (!BlackDiagBlackBishopPresent)) ||
+		(BlackDiagWhiteBishopPresent && BlackDiagBlackBishopPresent && (!WhiteDiagWhiteBishopPresent) && (!WhiteDiagBlackBishopPresent));
+
+	if((!PieceOtherThanKingBishopKnightPresent) && (!KnightPresent) && (!BishopPresent))
+	{
+		DrawCaseFound = true;
+	}
+	else if((!PieceOtherThanKingBishopKnightPresent) && (!KnightPresent) && (OnlyOneBishop))
+	{
+		DrawCaseFound = true;
+	}
+	else if((!PieceOtherThanKingBishopKnightPresent) && (!BishopPresent) && (OnlyOneKnight))
+	{
+		DrawCaseFound = true;
+	}
+	else if((!PieceOtherThanKingBishopKnightPresent) && (!KnightPresent) && SameColorBishopPresent)
+	{
+		DrawCaseFound = true;
+	}
 
 	// NOTE(hugo) : Checking for stalemate
 	bool ValidMoveFoundForCurrentPlayer = false;
