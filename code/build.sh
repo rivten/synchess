@@ -31,6 +31,7 @@ pushd "$CODE_PATH/../build"
 
 
 $CXX $CommonFlags ../code/sdl_synchess.cpp $CommonLinkerFlags -o synchess-x86_64
+$CXX $CommonFlags ../code/synchess_server.cpp $CommonLinkerFlags -o server_synchess-x86_64
 
 popd
 
