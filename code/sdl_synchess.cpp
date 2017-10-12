@@ -1,7 +1,9 @@
 #ifdef _WIN32
 #include <SDL.h>
+#include <SDL_net.h>
 #else
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_net.h>
 #endif
 
 #include <rivten.h>
@@ -709,6 +711,43 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	// TODO(hugo) : Maybe a little bit ugly to do this here
 	NewInput->dtForFrame = 1.0f / GameUpdateHz;
 	OldInput->dtForFrame = 1.0f / GameUpdateHz;
+
+	// NOTE(hugo):  SDLNet Init
+	s32 SDLNetInitResult = SDLNet_Init();
+	Assert(SDLNetInitResult != -1);
+	SDLNet_SocketSet SocketSet = SDLNet_AllocSocketSet(1);
+	Assert(SocketSet);
+	u32 ServerPort = 1234;
+	char* ServerName = "localhost";
+	IPaddress ServerAddress;
+	s32 HostResolvedResult = SDLNet_ResolveHost(&ServerAddress, ServerName, ServerPort);
+	Assert(HostResolvedResult != -1);
+	TCPsocket ClientSocket = SDLNet_TCP_Open(&ServerAddress);
+	Assert(ClientSocket);
+
+	s32 AddSocketResult = SDLNet_TCP_AddSocket(SocketSet, ClientSocket);
+	Assert(AddSocketResult != -1);
+
+	s32 ActiveSocketCount = SDLNet_CheckSockets(SocketSet, 5000);
+	Assert(ActiveSocketCount != -1);
+
+	s32 ClientSocketActivity = SDLNet_SocketReady(ClientSocket);
+	Assert(ClientSocketActivity != -1);
+
+	if(ClientSocketActivity > 0)
+	{
+		s32 MessageFromServer = SDLNet_SocketReady(ClientSocket);
+		Assert(MessageFromServer != -1);
+		if(MessageFromServer > 0)
+		{
+			char Buffer[1024] = {};
+			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, Buffer, ArrayCount(Buffer));
+			Assert(ReceivedBytes != -1);
+			Assert(ReceivedBytes < (s32)ArrayCount(Buffer));
+
+			printf("%s\n", Buffer);
+		}
+	}
 
 	while(Running)
 	{
