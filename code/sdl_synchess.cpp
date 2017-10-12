@@ -327,9 +327,12 @@ ConfigMatch(chessboard_config* ConfigA, chessboard_config* ConfigB)
 
 #include "chess.cpp"
 
-// TODO(hugo) : Get rid of the SDL_Renderer parameter in there
+#include "synchess_network.h"
+
+// TODO(hugo) : Get rid of the SDL_Renderer parameter in there : 
+// this can be done using the platform_api struct (see HandmadeHero for more)
 internal void
-GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer)
+GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SDLRenderer, TCPsocket ClientSocket)
 {
 	Assert(sizeof(game_state) <= GameMemory->StorageSize);
 	game_state* GameState = (game_state*) GameMemory->Storage;
@@ -355,8 +358,41 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 		GameState->PlayerToPlay = PieceColor_White;
 
+		GameState->ClientSocket = ClientSocket;
+
 		GameState->IsInitialised = true;
 	}
+
+	// NOTE(hugo) : Update network state
+	// {
+
+	network_synchess_message Message = {};
+	s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
+
+	switch(Message.Type)
+	{
+		case NetworkMessageType_None:
+			{
+				// TODO(hugo) : You sent a 'None' message ? Dafuck ?
+			} break;
+		case NetworkMessageType_ConnectionEstablished:
+			{
+				printf("Connection Established\n");
+			} break;
+		case NetworkMessageType_Quit:
+			{
+				printf("Quit\n");
+			} break;
+		case NetworkMessageType_MoveDone:
+			{
+				printf("Move Done\n");
+			} break;
+
+		InvalidDefaultCase;
+	}
+
+
+	// }
 
 	// NOTE(hugo) : Game update
 	// {
@@ -713,6 +749,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	OldInput->dtForFrame = 1.0f / GameUpdateHz;
 
 	// NOTE(hugo):  SDLNet Init
+	// {
 	s32 SDLNetInitResult = SDLNet_Init();
 	Assert(SDLNetInitResult != -1);
 	SDLNet_SocketSet SocketSet = SDLNet_AllocSocketSet(1);
@@ -745,9 +782,11 @@ s32 main(s32 ArgumentCount, char** Arguments)
 			Assert(ReceivedBytes != -1);
 			Assert(ReceivedBytes < (s32)ArrayCount(Buffer));
 
+			// NOTE(hugo) : This should be the welcoming message
 			printf("%s\n", Buffer);
 		}
 	}
+	// }
 
 	while(Running)
 	{
@@ -775,8 +814,9 @@ s32 main(s32 ArgumentCount, char** Arguments)
 		// }
 		//
 
+		SDLNet_CheckSockets(SocketSet, 0);
 
-		GameUpdateAndRender(&GameMemory, NewInput, Renderer);
+		GameUpdateAndRender(&GameMemory, NewInput, Renderer, ClientSocket);
 
 		// NOTE(hugo) : Framerate computation
 		u32 WorkMSElapsedForFrame = SDL_GetTicks() - LastCounter;

@@ -12,6 +12,8 @@
 
 // NOTE(hugo) : Basing most of this on : https://r3dux.org/2011/01/a-simple-sdl_net-chat-server-client/
 
+#include "synchess_network.h"
+
 s32 main(s32 ArgumentCount, char** Arguments)
 {
 	// NOTE(hugo) : Init SDL_Net
@@ -51,32 +53,6 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	bool Running = true;
 	while(Running)
 	{
-		// NOTE(hugo) : Input polling
-		SDL_Event Event;
-		while(SDL_PollEvent(&Event))
-		{
-			switch(Event.type)
-			{
-				case SDL_QUIT:
-					{
-						Running = false;
-					} break;
-				case SDL_KEYDOWN:
-				case SDL_KEYUP:
-					{
-						// TODO(hugo) : Does not seem to work if there are no window
-						printf("Key pressed\n");
-						if(Event.key.keysym.scancode == SDL_SCANCODE_Q)
-						{
-							Running = false;
-						}
-					} break;
-				default:
-					{
-					} break;
-			}
-		}
-
 		s32 ActiveSocketCount = SDLNet_CheckSockets(SocketSet, 0);
 		Assert(ActiveSocketCount != -1);
 
@@ -93,11 +69,12 @@ s32 main(s32 ArgumentCount, char** Arguments)
 				s32 AddSocketResult = SDLNet_TCP_AddSocket(SocketSet, ClientSockets[CurrentClientCount]);
 				Assert(AddSocketResult != -1);
 
-
 				SDLNet_TCP_Send(ClientSockets[CurrentClientCount], "Hello, sailor !\n", 16);
 				++CurrentClientCount;
 
 				printf("A new client connected !\n");
+
+				Running = false;
 			}
 			else
 			{
@@ -139,6 +116,11 @@ s32 main(s32 ArgumentCount, char** Arguments)
 			}
 		}
 	}
+
+	SDL_Delay(1000);
+	network_synchess_message Message = {};
+	Message.Type = NetworkMessageType_Quit;	
+	SDLNet_TCP_Send(ClientSockets[0], &Message, sizeof(Message));
 
 	SDLNet_FreeSocketSet(SocketSet);
 	SDLNet_TCP_Close(ServerSocket);

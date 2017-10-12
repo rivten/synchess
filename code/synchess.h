@@ -110,6 +110,12 @@ struct game_state
 
 	piece_color PlayerToPlay;
 
+	// NOTE(hugo) : Network
+	// TODO(hugo) : Are we sure we should put the network
+	// stuff into the game state or into its own struct ?
+	// Maybe do this into a platform_api struct in the future
+	TCPsocket ClientSocket;
+
 	bool IsInitialised;
 };
 
