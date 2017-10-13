@@ -368,6 +368,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 	network_synchess_message Message = {};
 	s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
+	Assert(ReceivedBytes != -1);
 
 	switch(Message.Type)
 	{

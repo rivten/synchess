@@ -24,7 +24,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	SDLNet_SocketSet SocketSet = SDLNet_AllocSocketSet(MaxSocketCount);
 	Assert(SocketSet);
 
-	u32 MaxClientCount = MaxSocketCount - 1; // NOTE(hugo) : The server needs a socket.
+	//u32 MaxClientCount = MaxSocketCount - 1; // NOTE(hugo) : The server needs a socket.
 	TCPsocket ClientSockets[2];
 	u32 CurrentClientCount = 0;
 
