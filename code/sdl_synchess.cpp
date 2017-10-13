@@ -92,6 +92,34 @@ struct game_memory
 
 #include "synchess.h"
 
+struct game_state
+{
+	renderer Renderer;
+	memory_arena GameArena;
+
+	chess_game_context ChessContext;
+
+	u32 SquareSizeInPixels;
+
+	user_mode UserMode;
+	chess_piece* PawnToPromote;
+
+	move_type TileHighlighted[64];
+	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
+	v2i ClickedTile;
+	v2i SelectedPieceP;
+
+	piece_color PlayerToPlay;
+
+	// NOTE(hugo) : Network
+	// TODO(hugo) : Are we sure we should put the network
+	// stuff into the game state or into its own struct ?
+	// Maybe do this into a platform_api struct in the future
+	TCPsocket ClientSocket;
+
+	bool IsInitialised;
+};
+
 struct rgb8
 {
 	u8 r;
@@ -366,29 +394,38 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	// NOTE(hugo) : Update network state
 	// {
 
-	network_synchess_message Message = {};
-	s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
-
-	switch(Message.Type)
+	s32 ClientSocketActivity = SDLNet_SocketReady(GameState->ClientSocket);
+	Assert(ClientSocketActivity != -1);
+	if(ClientSocketActivity > 0)
 	{
-		case NetworkMessageType_None:
-			{
-				// TODO(hugo) : You sent a 'None' message ? Dafuck ?
-			} break;
-		case NetworkMessageType_ConnectionEstablished:
-			{
-				printf("Connection Established\n");
-			} break;
-		case NetworkMessageType_Quit:
-			{
-				printf("Quit\n");
-			} break;
-		case NetworkMessageType_MoveDone:
-			{
-				printf("Move Done\n");
-			} break;
+		network_synchess_message Message = {};
+		s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
 
-		InvalidDefaultCase;
+		switch(Message.Type)
+		{
+			case NetworkMessageType_None:
+				{
+					// TODO(hugo) : You sent a 'None' message ? Dafuck ?
+				} break;
+			case NetworkMessageType_ConnectionEstablished:
+				{
+					printf("Connection Established\n");
+				} break;
+			case NetworkMessageType_Quit:
+				{
+					printf("Quit\n");
+				} break;
+			case NetworkMessageType_MoveDone:
+				{
+					printf("Move Done\n");
+				} break;
+			case NetworkMessageType_NoRoomForClient:
+				{
+					printf("No Room for you...\n");
+				} break;
+
+			InvalidDefaultCase;
+		}
 	}
 
 
@@ -646,6 +683,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			} break;
 		InvalidDefaultCase;
 	}
+
+	if(Pressed(Input->Keyboard.Buttons[SCANCODE_E]))
+	{
+		Assert(ClientSocket);
+		network_synchess_message Message = {};
+		Message.Type = NetworkMessageType_NoRoomForClient;
+		SDLNet_TCP_Send(ClientSocket, &Message, sizeof(Message));
+	}
 	// }
 
 	renderer* Renderer = &GameState->Renderer;
@@ -752,13 +797,16 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	// {
 	s32 SDLNetInitResult = SDLNet_Init();
 	Assert(SDLNetInitResult != -1);
+
 	SDLNet_SocketSet SocketSet = SDLNet_AllocSocketSet(1);
 	Assert(SocketSet);
-	u32 ServerPort = 1234;
-	char* ServerName = "localhost";
+
+	u32 ServerPort = SYNCHESS_PORT;
+	char* ServerName = SYNCHESS_SERVER_IP;
 	IPaddress ServerAddress;
 	s32 HostResolvedResult = SDLNet_ResolveHost(&ServerAddress, ServerName, ServerPort);
 	Assert(HostResolvedResult != -1);
+
 	TCPsocket ClientSocket = SDLNet_TCP_Open(&ServerAddress);
 	Assert(ClientSocket);
 
@@ -777,13 +825,13 @@ s32 main(s32 ArgumentCount, char** Arguments)
 		Assert(MessageFromServer != -1);
 		if(MessageFromServer > 0)
 		{
-			char Buffer[1024] = {};
-			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, Buffer, ArrayCount(Buffer));
+			network_synchess_message Message = {};
+			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, &Message, sizeof(Message));
 			Assert(ReceivedBytes != -1);
-			Assert(ReceivedBytes < (s32)ArrayCount(Buffer));
+			Assert(ReceivedBytes <= (s32)sizeof(Message));
 
 			// NOTE(hugo) : This should be the welcoming message
-			printf("%s\n", Buffer);
+			printf("0x%08X\n", *(u32*)&Message);
 		}
 	}
 	// }

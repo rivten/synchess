@@ -91,34 +91,6 @@ enum user_mode
 	UserMode_PromotePawn,
 };
 
-struct game_state
-{
-	renderer Renderer;
-	memory_arena GameArena;
-
-	chess_game_context ChessContext;
-
-	u32 SquareSizeInPixels;
-
-	user_mode UserMode;
-	chess_piece* PawnToPromote;
-
-	move_type TileHighlighted[64];
-	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
-	v2i ClickedTile;
-	v2i SelectedPieceP;
-
-	piece_color PlayerToPlay;
-
-	// NOTE(hugo) : Network
-	// TODO(hugo) : Are we sure we should put the network
-	// stuff into the game state or into its own struct ?
-	// Maybe do this into a platform_api struct in the future
-	TCPsocket ClientSocket;
-
-	bool IsInitialised;
-};
-
 struct tile_list
 {
 	v2i P;
