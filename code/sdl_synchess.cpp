@@ -92,32 +92,6 @@ struct game_memory
 
 #include "synchess.h"
 
-struct game_state
-{
-	renderer Renderer;
-	memory_arena GameArena;
-
-	chess_game_context ChessContext;
-
-	u32 SquareSizeInPixels;
-
-	user_mode UserMode;
-	chess_piece* PawnToPromote;
-
-	move_type TileHighlighted[64];
-	bitmap PieceBitmaps[PieceType_Count * PieceColor_Count];
-	v2i ClickedTile;
-	v2i SelectedPieceP;
-
-	// NOTE(hugo) : Network
-	// TODO(hugo) : Are we sure we should put the network
-	// stuff into the game state or into its own struct ?
-	// Maybe do this into a platform_api struct in the future
-	TCPsocket ClientSocket;
-
-	bool IsInitialised;
-};
-
 struct rgb8
 {
 	u8 r;
@@ -259,6 +233,26 @@ WriteConfig(board_tile* Chessboard)
 	return(Result);
 }
 
+#define BOARD_COORD(P) (P).x + 8 * (P).y
+
+internal void
+ClearTileHighlighted(game_state* GameState)
+{
+	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->TileHighlighted); ++TileIndex)
+	{
+		GameState->TileHighlighted[TileIndex] = MoveType_None;
+	}
+}
+
+internal void
+HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
+{
+	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
+	{
+		GameState->TileHighlighted[BOARD_COORD(Tile->P)] = Tile->MoveType;
+	}
+}
+
 internal bitmap 
 GetPieceBitmap(game_state* GameState, chess_piece Piece)
 {
@@ -315,27 +309,23 @@ DEBUGWriteConfigListToFile(chessboard_config_list* Sentinel)
 	fclose(FileHandle);
 }
 
+internal bool
+ConfigMatch(chessboard_config* ConfigA, chessboard_config* ConfigB)
+{
+	bool Match = true;
+	for(u32 TileIndex = 0;
+			Match && (TileIndex < ArrayCount(ConfigA->Tiles));
+			++TileIndex)
+	{
+		u8 TileA = ConfigA->Tiles[TileIndex];
+		u8 TileB = ConfigB->Tiles[TileIndex];
+		Match = (TileA == TileB);
+	}
+
+	return(Match);
+}
+
 #include "chess.cpp"
-
-internal void
-ClearTileHighlighted(game_state* GameState)
-{
-	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->TileHighlighted); ++TileIndex)
-	{
-		// TODO(hugo) : Not a cool convention because it forces us to have
-		// a null move type which is not exciting.
-		GameState->TileHighlighted[TileIndex] = MoveType_None;
-	}
-}
-
-internal void
-HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
-{
-	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
-	{
-		GameState->TileHighlighted[BOARD_COORD(Tile->P)] = Tile->MoveType;
-	}
-}
 
 #include "synchess_network.h"
 
@@ -366,7 +356,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
-		GameState->ChessContext.PlayerToPlay = PieceColor_White;
+		GameState->PlayerToPlay = PieceColor_White;
 
 		GameState->ClientSocket = ClientSocket;
 
@@ -382,28 +372,26 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 	{
 		network_synchess_message Message = {};
 		s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
+		Assert(ReceivedBytes != -1);
+		Assert(ReceivedBytes <= sizeof(Message));
+		case NetworkMessageType_None:
+			{
+				// TODO(hugo) : You sent a 'None' message ? Dafuck ?
+			} break;
+		case NetworkMessageType_ConnectionEstablished:
+			{
+				printf("Connection Established\n");
+			} break;
+		case NetworkMessageType_Quit:
+			{
+				printf("Quit\n");
+			} break;
+		case NetworkMessageType_MoveDone:
+			{
+				printf("Move Done\n");
+			} break;
 
-		switch(Message.Type)
-		{
-			case NetworkMessageType_ConnectionEstablished:
-				{
-					printf("Connection Established\n");
-				} break;
-			case NetworkMessageType_Quit:
-				{
-					printf("Quit\n");
-				} break;
-			case NetworkMessageType_MoveDone:
-				{
-					printf("Move Done\n");
-				} break;
-			case NetworkMessageType_NoRoomForClient:
-				{
-					printf("No Room for you...\n");
-				} break;
-
-			InvalidDefaultCase;
-		}
+		InvalidDefaultCase;
 	}
 
 
@@ -420,7 +408,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 					GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
 					Assert(IsInsideBoard(GameState->ClickedTile));
 					chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-					if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
+					if(Piece && (Piece->Color == GameState->PlayerToPlay))
 					{
 						ClearTileHighlighted(GameState);
 
@@ -429,7 +417,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 								GameState->ClickedTile, &GameState->GameArena);
 						if(PossibleMoveList)
 						{
-							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
+							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->PlayerToPlay, &GameState->GameArena);
 						}
 
 						HighlightPossibleMoves(GameState, PossibleMoveList);
@@ -456,8 +444,8 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
 										if((SelectedPiece->Type == PieceType_Pawn) && 
-												((GameState->ChessContext.PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
-												  (GameState->ChessContext.PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
+												((GameState->PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
+												  (GameState->PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
 										{
 											chess_piece* PromotedPawn = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
 											GameState->UserMode = UserMode_PromotePawn;
@@ -476,7 +464,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										// What I mean is that we don't need to have an exact castling_piece_tracker since, if some parameters are
 										// correct, then the castling will be disabled for a player. Therefore it is useless to have the other
 										// parameters be exact since the firsts are already meaningful to the decision.
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
 										if(SelectedPiece->Type == PieceType_King)
 										{
 											CastlingPieceTrackerPlayer->KingHasMoved = true;
@@ -485,14 +473,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										{
 											v2i SelectedPieceP = GameState->SelectedPieceP;
 											if((SelectedPieceP.x == 0) &&
-													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->QueenRook.HasMoved = true;
 											}
 											else if((SelectedPieceP.x == 7) &&
-													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->KingRook.HasMoved = true;
 											}
@@ -501,14 +489,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										{
 											v2i SelectedPieceP = GameState->ClickedTile;
 											if((SelectedPieceP.x == 0) &&
-													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->QueenRook.IsFirstRank = true;
 											}
 											else if((SelectedPieceP.x == 7) &&
-													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->KingRook.IsFirstRank = true;
 											}
@@ -516,7 +504,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 									} break;
 								case MoveType_CastlingKingSide:
 									{
-										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
 										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
 										chess_piece* KingRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))];
 										Assert(KingRook->Type == PieceType_Rook);
@@ -531,12 +519,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
 
 										// NOTE(hugo) : Disabling future castling possibilities
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
 										CastlingPieceTrackerPlayer->KingHasMoved = true;
 									} break;
 								case MoveType_CastlingQueenSide:
 									{
-										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
 										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
 										chess_piece* QueenRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))];
 										Assert(QueenRook->Type == PieceType_Rook);
@@ -551,14 +539,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
 
 										// NOTE(hugo) : Disabling future castling possibilities
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
 										CastlingPieceTrackerPlayer->KingHasMoved = true;
 									} break;
 								case MoveType_EnPassant:
 									{
 										chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
 										Assert(SelectedPiece);
-										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->PlayerToPlay;
 										v2i PieceDestP = GameState->ClickedTile;
 										v2i PieceP = GameState->SelectedPieceP;
 										if(PlayerMovingColor == PieceColor_White)
@@ -602,22 +590,22 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 							// NOTE(hugo) : Resolve situation for the other player
 							GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
 							bool IsCurrentPlayerCheckmate = false;
-							if(IsPlayerUnderCheck(OtherColor(GameState->ChessContext.PlayerToPlay), GameState->ChessContext.PlayerCheck))
+							if(IsPlayerUnderCheck(OtherColor(GameState->PlayerToPlay), GameState->ChessContext.PlayerCheck))
 							{
-								IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->ChessContext.PlayerToPlay), &GameState->GameArena);
+								IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
 							}
 							if(IsCurrentPlayerCheckmate)
 							{
 								printf("Checkmate !!\n");
 								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 							}
-							else if(IsDraw(&GameState->ChessContext, &GameState->GameArena))
+							else if(IsDraw(GameState))
 							{
 								printf("PAT !!\n");
 								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 							}
 
-							GameState->ChessContext.PlayerToPlay = OtherColor(GameState->ChessContext.PlayerToPlay);
+							GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
 						}
 					}
 				}
@@ -660,14 +648,6 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 			} break;
 		InvalidDefaultCase;
-	}
-
-	if(Pressed(Input->Keyboard.Buttons[SCANCODE_E]))
-	{
-		Assert(ClientSocket);
-		network_synchess_message Message = {};
-		Message.Type = NetworkMessageType_NoRoomForClient;
-		SDLNet_TCP_Send(ClientSocket, &Message, sizeof(Message));
 	}
 	// }
 
@@ -775,16 +755,13 @@ s32 main(s32 ArgumentCount, char** Arguments)
 	// {
 	s32 SDLNetInitResult = SDLNet_Init();
 	Assert(SDLNetInitResult != -1);
-
 	SDLNet_SocketSet SocketSet = SDLNet_AllocSocketSet(1);
 	Assert(SocketSet);
-
-	u32 ServerPort = SYNCHESS_PORT;
-	char* ServerName = SYNCHESS_SERVER_IP;
+	u32 ServerPort = 1234;
+	char* ServerName = "localhost";
 	IPaddress ServerAddress;
 	s32 HostResolvedResult = SDLNet_ResolveHost(&ServerAddress, ServerName, ServerPort);
 	Assert(HostResolvedResult != -1);
-
 	TCPsocket ClientSocket = SDLNet_TCP_Open(&ServerAddress);
 	Assert(ClientSocket);
 
@@ -803,13 +780,13 @@ s32 main(s32 ArgumentCount, char** Arguments)
 		Assert(MessageFromServer != -1);
 		if(MessageFromServer > 0)
 		{
-			network_synchess_message Message = {};
-			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, &Message, sizeof(Message));
+			char Buffer[1024] = {};
+			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, Buffer, ArrayCount(Buffer));
 			Assert(ReceivedBytes != -1);
-			Assert(ReceivedBytes <= (s32)sizeof(Message));
+			Assert(ReceivedBytes < (s32)ArrayCount(Buffer));
 
 			// NOTE(hugo) : This should be the welcoming message
-			printf("0x%08X\n", *(u32*)&Message);
+			printf("%s\n", Buffer);
 		}
 	}
 	// }
