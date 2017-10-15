@@ -83,6 +83,8 @@ struct chess_game_context
 	player_select PlayerCheck;
 
 	u32 LastDoubleStepCol;
+
+	piece_color PlayerToPlay;
 };
 
 enum user_mode

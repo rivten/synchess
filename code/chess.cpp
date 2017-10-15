@@ -3,14 +3,16 @@
 // NOTE(hugo) : This file contains all the logic and rules 
 // for a basic game of chess.
 
+#define BOARD_COORD(P) (P).x + 8 * (P).y
+
 #define PLACE_PIECE_AT(I, J, TypeP, ColorP)\
 	Assert(!Chessboard[I + 8 * J]);\
-	Chessboard[I + 8 * J] = PushStruct(GameArena, chess_piece);\
+	Chessboard[I + 8 * J] = PushStruct(Arena, chess_piece);\
 	Chessboard[I + 8 * J]->Type = PieceType_##TypeP;\
 	Chessboard[I + 8 * J]->Color = PieceColor_##ColorP;\
 
 internal void
-InitialiseChessboard(board_tile* Chessboard, memory_arena* GameArena)
+InitialiseChessboard(board_tile* Chessboard, memory_arena* Arena)
 {
 #if 0
 	// NOTE(hugo) : White setup
@@ -823,9 +825,25 @@ DeleteInvalidMoveDueToCheck(chess_game_context* ChessContext, chess_piece* Piece
 	}
 }
 
+internal bool
+ConfigMatch(chessboard_config* ConfigA, chessboard_config* ConfigB)
+{
+	bool Match = true;
+	for(u32 TileIndex = 0;
+			Match && (TileIndex < ArrayCount(ConfigA->Tiles));
+			++TileIndex)
+	{
+		u8 TileA = ConfigA->Tiles[TileIndex];
+		u8 TileB = ConfigB->Tiles[TileIndex];
+		Match = (TileA == TileB);
+	}
+
+	return(Match);
+}
+
 // TODO(hugo) : Test this function
 internal bool
-IsDraw(game_state* GameState)
+IsDraw(chess_game_context* ChessContext, memory_arena* Arena)
 {
 	/* NOTE(hugo) : From Wikipedia :
 	 The game ends in a draw if any of these conditions occur:
@@ -859,7 +877,7 @@ IsDraw(game_state* GameState)
 	{
 		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
 		{
-			chess_piece* Piece = GameState->ChessContext.Chessboard[SquareX + 8 * SquareY];
+			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
 			if(Piece)
 			{
 				switch(Piece->Type)
@@ -962,22 +980,22 @@ IsDraw(game_state* GameState)
 
 	// NOTE(hugo) : Checking for stalemate
 	bool ValidMoveFoundForCurrentPlayer = false;
-	piece_color CurrentPlayer = OtherColor(GameState->PlayerToPlay); // NOTE(hugo) : We check the next player to play
+	piece_color CurrentPlayer = OtherColor(ChessContext->PlayerToPlay); // NOTE(hugo) : We check the next player to play
 	for(u32 SquareY = 0; !ValidMoveFoundForCurrentPlayer && (SquareY < 8); ++SquareY)
 	{
 		for(u32 SquareX = 0; !ValidMoveFoundForCurrentPlayer && (SquareX < 8); ++SquareX)
 		{
-			chess_piece* Piece = GameState->ChessContext.Chessboard[SquareX + 8 * SquareY];
+			chess_piece* Piece = ChessContext->Chessboard[SquareX + 8 * SquareY];
 			if(Piece && Piece->Color == CurrentPlayer)
 			{
-				temporary_memory AttackingListTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+				temporary_memory AttackingListTempMemory = BeginTemporaryMemory(Arena);
 
-				tile_list* AttackingTileList = GetAttackingTileList(&GameState->ChessContext, 
-						Piece, V2i(SquareX, SquareY), &GameState->GameArena);
+				tile_list* AttackingTileList = GetAttackingTileList(ChessContext, 
+						Piece, V2i(SquareX, SquareY), Arena);
 				if(AttackingTileList)
 				{
-					DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, V2i(SquareX, SquareY),
-							&AttackingTileList, CurrentPlayer, &GameState->GameArena);
+					DeleteInvalidMoveDueToCheck(ChessContext, Piece, V2i(SquareX, SquareY),
+							&AttackingTileList, CurrentPlayer, Arena);
 				}
 				if(AttackingTileList)
 				{
@@ -1000,9 +1018,9 @@ IsDraw(game_state* GameState)
 	// NOTE(hugo) : Since the current configuration was added 
 	// before checking for the draw, the current config is just the
 	// sentinel of the current context
-	chessboard_config CurrentConfig = GameState->ChessContext.ChessboardConfigSentinel->Config;
+	chessboard_config CurrentConfig = ChessContext->ChessboardConfigSentinel->Config;
 	u32 ConfigMatchCounter = 0;
-	for(chessboard_config_list* CurrentTestConfig = GameState->ChessContext.ChessboardConfigSentinel->Next;
+	for(chessboard_config_list* CurrentTestConfig = ChessContext->ChessboardConfigSentinel->Next;
 			!DrawCaseFound && CurrentTestConfig;
 			CurrentTestConfig = CurrentTestConfig->Next)
 	{

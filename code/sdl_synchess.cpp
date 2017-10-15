@@ -109,8 +109,6 @@ struct game_state
 	v2i ClickedTile;
 	v2i SelectedPieceP;
 
-	piece_color PlayerToPlay;
-
 	// NOTE(hugo) : Network
 	// TODO(hugo) : Are we sure we should put the network
 	// stuff into the game state or into its own struct ?
@@ -261,26 +259,6 @@ WriteConfig(board_tile* Chessboard)
 	return(Result);
 }
 
-#define BOARD_COORD(P) (P).x + 8 * (P).y
-
-internal void
-ClearTileHighlighted(game_state* GameState)
-{
-	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->TileHighlighted); ++TileIndex)
-	{
-		GameState->TileHighlighted[TileIndex] = MoveType_None;
-	}
-}
-
-internal void
-HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
-{
-	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
-	{
-		GameState->TileHighlighted[BOARD_COORD(Tile->P)] = Tile->MoveType;
-	}
-}
-
 internal bitmap 
 GetPieceBitmap(game_state* GameState, chess_piece Piece)
 {
@@ -337,23 +315,27 @@ DEBUGWriteConfigListToFile(chessboard_config_list* Sentinel)
 	fclose(FileHandle);
 }
 
-internal bool
-ConfigMatch(chessboard_config* ConfigA, chessboard_config* ConfigB)
-{
-	bool Match = true;
-	for(u32 TileIndex = 0;
-			Match && (TileIndex < ArrayCount(ConfigA->Tiles));
-			++TileIndex)
-	{
-		u8 TileA = ConfigA->Tiles[TileIndex];
-		u8 TileB = ConfigB->Tiles[TileIndex];
-		Match = (TileA == TileB);
-	}
+#include "chess.cpp"
 
-	return(Match);
+internal void
+ClearTileHighlighted(game_state* GameState)
+{
+	for(u32 TileIndex = 0; TileIndex < ArrayCount(GameState->TileHighlighted); ++TileIndex)
+	{
+		// TODO(hugo) : Not a cool convention because it forces us to have
+		// a null move type which is not exciting.
+		GameState->TileHighlighted[TileIndex] = MoveType_None;
+	}
 }
 
-#include "chess.cpp"
+internal void
+HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
+{
+	for(tile_list* Tile = TileList; Tile; Tile = Tile->Next)
+	{
+		GameState->TileHighlighted[BOARD_COORD(Tile->P)] = Tile->MoveType;
+	}
+}
 
 #include "synchess_network.h"
 
@@ -384,7 +366,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
-		GameState->PlayerToPlay = PieceColor_White;
+		GameState->ChessContext.PlayerToPlay = PieceColor_White;
 
 		GameState->ClientSocket = ClientSocket;
 
@@ -403,10 +385,6 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 
 		switch(Message.Type)
 		{
-			case NetworkMessageType_None:
-				{
-					// TODO(hugo) : You sent a 'None' message ? Dafuck ?
-				} break;
 			case NetworkMessageType_ConnectionEstablished:
 				{
 					printf("Connection Established\n");
@@ -442,7 +420,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 					GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
 					Assert(IsInsideBoard(GameState->ClickedTile));
 					chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-					if(Piece && (Piece->Color == GameState->PlayerToPlay))
+					if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
 					{
 						ClearTileHighlighted(GameState);
 
@@ -451,7 +429,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 								GameState->ClickedTile, &GameState->GameArena);
 						if(PossibleMoveList)
 						{
-							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->PlayerToPlay, &GameState->GameArena);
+							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
 						}
 
 						HighlightPossibleMoves(GameState, PossibleMoveList);
@@ -478,8 +456,8 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)] = 0;
 										GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)] = SelectedPiece;
 										if((SelectedPiece->Type == PieceType_Pawn) && 
-												((GameState->PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
-												  (GameState->PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
+												((GameState->ChessContext.PlayerToPlay == PieceColor_White && GameState->ClickedTile.y == 7)||
+												  (GameState->ChessContext.PlayerToPlay == PieceColor_Black && GameState->ClickedTile.y == 0)))
 										{
 											chess_piece* PromotedPawn = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
 											GameState->UserMode = UserMode_PromotePawn;
@@ -498,7 +476,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										// What I mean is that we don't need to have an exact castling_piece_tracker since, if some parameters are
 										// correct, then the castling will be disabled for a player. Therefore it is useless to have the other
 										// parameters be exact since the firsts are already meaningful to the decision.
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
 										if(SelectedPiece->Type == PieceType_King)
 										{
 											CastlingPieceTrackerPlayer->KingHasMoved = true;
@@ -507,14 +485,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										{
 											v2i SelectedPieceP = GameState->SelectedPieceP;
 											if((SelectedPieceP.x == 0) &&
-													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->QueenRook.HasMoved = true;
 											}
 											else if((SelectedPieceP.x == 7) &&
-													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->KingRook.HasMoved = true;
 											}
@@ -523,14 +501,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										{
 											v2i SelectedPieceP = GameState->ClickedTile;
 											if((SelectedPieceP.x == 0) &&
-													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->QueenRook.IsFirstRank = true;
 											}
 											else if((SelectedPieceP.x == 7) &&
-													((GameState->PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
-													 (GameState->PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
+													((GameState->ChessContext.PlayerToPlay == PieceColor_White) && (SelectedPieceP.y == 0) ||
+													 (GameState->ChessContext.PlayerToPlay == PieceColor_Black) && (SelectedPieceP.y == 7)))
 											{
 												CastlingPieceTrackerPlayer->KingRook.IsFirstRank = true;
 											}
@@ -538,7 +516,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 									} break;
 								case MoveType_CastlingKingSide:
 									{
-										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
 										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
 										chess_piece* KingRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(7, LineIndex))];
 										Assert(KingRook->Type == PieceType_Rook);
@@ -553,12 +531,12 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(5, LineIndex))] = KingRook;
 
 										// NOTE(hugo) : Disabling future castling possibilities
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
 										CastlingPieceTrackerPlayer->KingHasMoved = true;
 									} break;
 								case MoveType_CastlingQueenSide:
 									{
-										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
 										s32 LineIndex = (PlayerMovingColor == PieceColor_White) ? 0 : 7;
 										chess_piece* QueenRook = GameState->ChessContext.Chessboard[BOARD_COORD(V2i(0, LineIndex))];
 										Assert(QueenRook->Type == PieceType_Rook);
@@ -573,14 +551,14 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 										GameState->ChessContext.Chessboard[BOARD_COORD(V2i(3, LineIndex))] = QueenRook;
 
 										// NOTE(hugo) : Disabling future castling possibilities
-										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->PlayerToPlay;
+										castling_piece_tracker* CastlingPieceTrackerPlayer = GameState->ChessContext.CastlingPieceTracker + GameState->ChessContext.PlayerToPlay;
 										CastlingPieceTrackerPlayer->KingHasMoved = true;
 									} break;
 								case MoveType_EnPassant:
 									{
 										chess_piece* SelectedPiece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->SelectedPieceP)];
 										Assert(SelectedPiece);
-										piece_color PlayerMovingColor = GameState->PlayerToPlay;
+										piece_color PlayerMovingColor = GameState->ChessContext.PlayerToPlay;
 										v2i PieceDestP = GameState->ClickedTile;
 										v2i PieceP = GameState->SelectedPieceP;
 										if(PlayerMovingColor == PieceColor_White)
@@ -624,22 +602,22 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 							// NOTE(hugo) : Resolve situation for the other player
 							GameState->ChessContext.PlayerCheck = SearchForKingCheck(&GameState->ChessContext, &GameState->GameArena);
 							bool IsCurrentPlayerCheckmate = false;
-							if(IsPlayerUnderCheck(OtherColor(GameState->PlayerToPlay), GameState->ChessContext.PlayerCheck))
+							if(IsPlayerUnderCheck(OtherColor(GameState->ChessContext.PlayerToPlay), GameState->ChessContext.PlayerCheck))
 							{
-								IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->PlayerToPlay), &GameState->GameArena);
+								IsCurrentPlayerCheckmate = IsPlayerCheckmate(&GameState->ChessContext, OtherColor(GameState->ChessContext.PlayerToPlay), &GameState->GameArena);
 							}
 							if(IsCurrentPlayerCheckmate)
 							{
 								printf("Checkmate !!\n");
 								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 							}
-							else if(IsDraw(GameState))
+							else if(IsDraw(&GameState->ChessContext, &GameState->GameArena))
 							{
 								printf("PAT !!\n");
 								DEBUGWriteConfigListToFile(GameState->ChessContext.ChessboardConfigSentinel);
 							}
 
-							GameState->PlayerToPlay = OtherColor(GameState->PlayerToPlay);
+							GameState->ChessContext.PlayerToPlay = OtherColor(GameState->ChessContext.PlayerToPlay);
 						}
 					}
 				}

@@ -15,6 +15,7 @@
 
 #include "synchess.h"
 #include "synchess_network.h"
+#include "chess.cpp"
 
 enum server_game_mode
 {
@@ -33,8 +34,6 @@ struct server_state
 	memory_arena ServerArena;
 
 	chess_game_context ChessContext;
-
-	piece_color PlayerToPlay;
 
 	// NOTE(hugo) : Network stuff
 	SDLNet_SocketSet SocketSet;
@@ -69,6 +68,8 @@ s32 main(s32 ArgumentCount, char** Arguments)
 		server_state* ServerState = (server_state*) ServerMemory.Storage;
 		if(!ServerState->IsInitialised)
 		{
+			// NOTE(hugo) : Network init
+			// {
 			u32 MaxSocketCount = 3;
 			ServerState->SocketSet = SDLNet_AllocSocketSet(MaxSocketCount);
 			Assert(ServerState->SocketSet);
@@ -94,6 +95,12 @@ s32 main(s32 ArgumentCount, char** Arguments)
 
 			s32 AddSocketResult = SDLNet_TCP_AddSocket(ServerState->SocketSet, ServerState->ServerSocket);
 			Assert(AddSocketResult != -1);
+			// }
+
+			u64 ServerArenaSize = Megabytes(128);
+			void* ServerArenaBase = (u8*)ServerMemory.Storage + sizeof(server_state);
+			InitialiseArena(&ServerState->ServerArena, ServerArenaSize, ServerArenaBase);
+			InitialiseChessContext(&ServerState->ChessContext, &ServerState->ServerArena);
 
 			ServerState->IsInitialised = true;
 		}
@@ -162,6 +169,49 @@ s32 main(s32 ArgumentCount, char** Arguments)
 				{
 					// NOTE(hugo) : A message was received
 					printf("Received from client #%i : %08x\n", ClientIndex, Message.Type);
+					piece_color ClientColor = (piece_color)(ClientIndex);
+					switch(Message.Type)
+					{
+						case NetworkMessageType_ConnectionEstablished:
+						case NetworkMessageType_Quit:
+						case NetworkMessageType_NoRoomForClient:
+							{
+								// NOTE(hugo) : Client should not send this.
+								InvalidCodePath;
+							} break;
+						case NetworkMessageType_MoveDone:
+							{
+								move_type MoveType = Message.MoveDone.Type;
+								v2i InitialP = Message.MoveDone.InitialP;
+								v2i DestP = Message.MoveDone.DestP;
+								switch(MoveType)
+								{
+									case MoveType_None:
+										{
+											InvalidCodePath;
+										} break;
+									case MoveType_Regular:
+										{
+										} break;
+									case MoveType_CastlingKingSide:
+										{
+										} break;
+									case MoveType_CastlingQueenSide:
+										{
+										} break;
+									case MoveType_EnPassant:
+										{
+										} break;
+									case MoveType_DoubleStepPawn:
+										{
+										} break;
+
+									InvalidDefaultCase;
+								}
+							} break;
+
+						InvalidDefaultCase;
+					}
 				}
 			}
 		}
