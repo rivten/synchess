@@ -23,13 +23,10 @@ struct network_message_connection_establised
 	piece_color Color;
 };
 
-struct network_message_move_done
-{
-	move_type Type;
-	v2i InitialP;
-	v2i DestP;
-};
+typedef move_params network_message_move_done;
 
+// TODO(hugo) : Probably the big player here
+// Might take a lot of bytes, sent each turn.
 struct network_message_chess_context_update
 {
 	chessboard_config NewBoardConfig;
@@ -38,14 +35,13 @@ struct network_message_chess_context_update
 	// In theory, we should only send each peer the piece_tracker 
 	// that concerns himself
 	castling_piece_tracker CastlingPieceTracker[2];
-
 	player_select PlayerCheck;
 
 	// TODO(hugo) : Necessary here ? Or other message to send
 	// checkmate status ? What about draw ?
 	player_select PlayerCheckmate;
-
 	u32 LastDoubleStepCol;
+	piece_color PlayerToPlay;
 };
 
 struct network_synchess_message

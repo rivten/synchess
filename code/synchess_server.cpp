@@ -181,33 +181,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 							} break;
 						case NetworkMessageType_MoveDone:
 							{
-								move_type MoveType = Message.MoveDone.Type;
-								v2i InitialP = Message.MoveDone.InitialP;
-								v2i DestP = Message.MoveDone.DestP;
-								switch(MoveType)
-								{
-									case MoveType_None:
-										{
-											InvalidCodePath;
-										} break;
-									case MoveType_Regular:
-										{
-										} break;
-									case MoveType_CastlingKingSide:
-										{
-										} break;
-									case MoveType_CastlingQueenSide:
-										{
-										} break;
-									case MoveType_EnPassant:
-										{
-										} break;
-									case MoveType_DoubleStepPawn:
-										{
-										} break;
-
-									InvalidDefaultCase;
-								}
+								ApplyMove(&ServerState->ChessContext, Message.MoveDone, &ServerState->ServerArena);
 							} break;
 
 						InvalidDefaultCase;
