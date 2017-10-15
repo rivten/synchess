@@ -10,17 +10,18 @@
 enum network_message_type
 {
 	NetworkMessageType_ConnectionEstablished,
-	NetworkMessageType_Quit,
+	NetworkMessageType_Quit, // TODO(hugo) : Unused ?
 	NetworkMessageType_MoveDone,
 	NetworkMessageType_NoRoomForClient,
 	NetworkMessageType_ChessContextUpdate,
+	NetworkMessageType_GameStarted,
 
 	NetworkMessageType_Count,
 };
 
 struct network_message_connection_establised
 {
-	piece_color Color;
+	piece_color GivenColor;
 };
 
 typedef move_params network_message_move_done;
@@ -56,4 +57,10 @@ struct network_synchess_message
 	};
 };
 
+internal void
+NetSendMessage(TCPsocket Socket, network_synchess_message* Message)
+{
+	s32 BytesSent = SDLNet_TCP_Send(Socket, Message, sizeof(network_message_type));
+	Assert(BytesSent >= s32(sizeof(network_synchess_message)));
+}
 

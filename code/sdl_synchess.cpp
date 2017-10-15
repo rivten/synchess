@@ -114,6 +114,10 @@ struct game_state
 	// stuff into the game state or into its own struct ?
 	// Maybe do this into a platform_api struct in the future
 	TCPsocket ClientSocket;
+	piece_color MyPlayerColor; 
+	bool HasServerGameStarted;
+
+	bool LocalGame;
 
 	bool IsInitialised;
 };
@@ -341,141 +345,208 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		GameState->ChessContext.PlayerToPlay = PieceColor_White;
 
 		GameState->ClientSocket = ClientSocket;
+		GameState->LocalGame = true;
+		GameState->MyPlayerColor = PieceColor_Count; // NOTE(hugo) : Putting it to something invalid.
+		GameState->HasServerGameStarted = false;
 
 		GameState->IsInitialised = true;
 	}
 
 	// NOTE(hugo) : Update network state
 	// {
-
-	s32 ClientSocketActivity = SDLNet_SocketReady(GameState->ClientSocket);
-	Assert(ClientSocketActivity != -1);
-	if(ClientSocketActivity > 0)
+	if(!GameState->LocalGame)
 	{
-		network_synchess_message Message = {};
-		s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
-
-		switch(Message.Type)
+		s32 ClientSocketActivity = SDLNet_SocketReady(GameState->ClientSocket);
+		Assert(ClientSocketActivity != -1);
+		if(ClientSocketActivity > 0)
 		{
-			case NetworkMessageType_ConnectionEstablished:
-				{
-					printf("Connection Established\n");
-				} break;
-			case NetworkMessageType_Quit:
-				{
-					printf("Quit\n");
-				} break;
-			case NetworkMessageType_MoveDone:
-				{
-					printf("Move Done\n");
-				} break;
-			case NetworkMessageType_NoRoomForClient:
-				{
-					printf("No Room for you...\n");
-				} break;
+			network_synchess_message Message = {};
+			s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
 
-			InvalidDefaultCase;
+			// NOTE(hugo) : Receiving message
+			switch(Message.Type)
+			{
+				case NetworkMessageType_ConnectionEstablished:
+					{
+						printf("Connection Established\n");
+						GameState->MyPlayerColor = Message.ConnectionEstablished.GivenColor;
+						printf("We are %s\n", (GameState->MyPlayerColor == PieceColor_White) ? 
+								"white" : "black");
+					} break;
+				case NetworkMessageType_Quit:
+					{
+						printf("Quit\n");
+					} break;
+				case NetworkMessageType_NoRoomForClient:
+					{
+						// TODO(hugo) : Do something intelligent here
+						printf("No Room for you...\n");
+						InvalidCodePath;
+					} break;
+				case NetworkMessageType_ChessContextUpdate:
+					{
+					} break;
+				case NetworkMessageType_GameStarted:
+					{
+						GameState->HasServerGameStarted = true;
+					} break;
+				case NetworkMessageType_MoveDone:
+					{
+						// NOTE(hugo) : The server should not
+						// send this message types
+						InvalidCodePath;
+					} break;
+
+				InvalidDefaultCase;
+			}
+		}
+
+		bool IsMyTurnToPlay = GameState->HasServerGameStarted &&
+			(GameState->ChessContext.PlayerToPlay == GameState->MyPlayerColor);
+
+		if(IsMyTurnToPlay && Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+		{
+			GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
+			Assert(IsInsideBoard(GameState->ClickedTile));
+			chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+			if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
+			{
+				ClearTileHighlighted(GameState);
+
+				temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+				tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
+						GameState->ClickedTile, &GameState->GameArena);
+				if(PossibleMoveList)
+				{
+					DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
+				}
+
+				HighlightPossibleMoves(GameState, PossibleMoveList);
+				EndTemporaryMemory(HighlightingTileTempMemory);
+
+
+				GameState->SelectedPieceP = GameState->ClickedTile;
+			}
+			else
+			{
+				move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
+				if(ClickMoveType != MoveType_None)
+				{
+					move_params MoveParams = {};
+					MoveParams.Type = ClickMoveType;
+					MoveParams.InitialP = GameState->SelectedPieceP;
+					MoveParams.DestP = GameState->ClickedTile;
+
+					network_synchess_message Message = {};
+					Message.Type = NetworkMessageType_MoveDone;
+					Message.MoveDone = MoveParams;
+					NetSendMessage(GameState->ClientSocket, &Message);
+				}
+			}
 		}
 	}
-
-
 	// }
 
 	// NOTE(hugo) : Game update
 	// {
-	switch(GameState->UserMode)
+	else
 	{
-		case UserMode_MakeMove:
-			{
-				if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+		switch(GameState->UserMode)
+		{
+			case UserMode_MakeMove:
 				{
-					GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
-					Assert(IsInsideBoard(GameState->ClickedTile));
-					chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-					if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
+					if(Pressed(Input->Mouse.Buttons[MouseButton_Left]))
 					{
-						ClearTileHighlighted(GameState);
-
-						temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-						tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
-								GameState->ClickedTile, &GameState->GameArena);
-						if(PossibleMoveList)
+						GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
+						Assert(IsInsideBoard(GameState->ClickedTile));
+						chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+						if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
 						{
-							DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
-						}
-
-						HighlightPossibleMoves(GameState, PossibleMoveList);
-						EndTemporaryMemory(HighlightingTileTempMemory);
-
-
-						GameState->SelectedPieceP = GameState->ClickedTile;
-					}
-					else
-					{
-						move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
-						if(ClickMoveType != MoveType_None)
-						{
-							// NOTE(hugo): Make the intended move effective
-							// if the player selects a valid tile
-							move_params MoveParams = {};
-							MoveParams.Type = ClickMoveType;
-							MoveParams.InitialP = GameState->SelectedPieceP;
-							MoveParams.DestP = GameState->ClickedTile;
-							ApplyMove(&GameState->ChessContext, MoveParams, &GameState->GameArena);
-
 							ClearTileHighlighted(GameState);
 
+							temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+							tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
+									GameState->ClickedTile, &GameState->GameArena);
+							if(PossibleMoveList)
+							{
+								DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
+							}
+
+							HighlightPossibleMoves(GameState, PossibleMoveList);
+							EndTemporaryMemory(HighlightingTileTempMemory);
+
+
+							GameState->SelectedPieceP = GameState->ClickedTile;
+						}
+						else
+						{
+							move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
+							if(ClickMoveType != MoveType_None)
+							{
+								// NOTE(hugo): Make the intended move effective
+								// if the player selects a valid tile
+								move_params MoveParams = {};
+								MoveParams.Type = ClickMoveType;
+								MoveParams.InitialP = GameState->SelectedPieceP;
+								MoveParams.DestP = GameState->ClickedTile;
+								ApplyMove(&GameState->ChessContext, MoveParams, &GameState->GameArena);
+
+								ClearTileHighlighted(GameState);
+
+							}
 						}
 					}
-				}
-				if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
+					if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
+					{
+						ClearTileHighlighted(GameState);
+					}
+				} break;
+			case UserMode_PromotePawn:
 				{
-					ClearTileHighlighted(GameState);
-				}
-			} break;
-		case UserMode_PromotePawn:
-			{
-				Assert(GameState->PawnToPromote);
+					Assert(GameState->PawnToPromote);
 
-				bool PromotionChosen = false;
-				if(Pressed(Input->Keyboard.Buttons[SCANCODE_Q]))
-				{
-					GameState->PawnToPromote->Type = PieceType_Queen;
-					PromotionChosen = true;
-				}
-				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_R]))
-				{
-					GameState->PawnToPromote->Type = PieceType_Rook;
-					PromotionChosen = true;
-				}
-				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_B]))
-				{
-					GameState->PawnToPromote->Type = PieceType_Bishop;
-					PromotionChosen = true;
-				}
-				else if(Pressed(Input->Keyboard.Buttons[SCANCODE_N]))
-				{
-					GameState->PawnToPromote->Type = PieceType_Knight;
-					PromotionChosen = true;
-				}
+					bool PromotionChosen = false;
+					if(Pressed(Input->Keyboard.Buttons[SCANCODE_Q]))
+					{
+						GameState->PawnToPromote->Type = PieceType_Queen;
+						PromotionChosen = true;
+					}
+					else if(Pressed(Input->Keyboard.Buttons[SCANCODE_R]))
+					{
+						GameState->PawnToPromote->Type = PieceType_Rook;
+						PromotionChosen = true;
+					}
+					else if(Pressed(Input->Keyboard.Buttons[SCANCODE_B]))
+					{
+						GameState->PawnToPromote->Type = PieceType_Bishop;
+						PromotionChosen = true;
+					}
+					else if(Pressed(Input->Keyboard.Buttons[SCANCODE_N]))
+					{
+						GameState->PawnToPromote->Type = PieceType_Knight;
+						PromotionChosen = true;
+					}
 
-				if(PromotionChosen)
-				{
-					GameState->UserMode = UserMode_MakeMove;
-					GameState->PawnToPromote = 0;
-				}
+					if(PromotionChosen)
+					{
+						GameState->UserMode = UserMode_MakeMove;
+						GameState->PawnToPromote = 0;
+					}
 
-			} break;
-		InvalidDefaultCase;
+				} break;
+			InvalidDefaultCase;
+		}
 	}
 
+#if 0
 	if(Pressed(Input->Keyboard.Buttons[SCANCODE_E]))
 	{
 		Assert(ClientSocket);
 		network_synchess_message Message = {};
 		Message.Type = NetworkMessageType_NoRoomForClient;
-		SDLNet_TCP_Send(ClientSocket, &Message, sizeof(Message));
+		NetSendMessage(GameState->ClientSocket, &Message);
 	}
+#endif
 	// }
 
 	renderer* Renderer = &GameState->Renderer;

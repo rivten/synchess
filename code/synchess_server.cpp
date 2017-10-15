@@ -17,20 +17,8 @@
 #include "synchess_network.h"
 #include "chess.cpp"
 
-enum server_game_mode
-{
-	ServerGameMode_WaitingFor2PlayersToJoin,
-	ServerGameMode_WaitingFor1PlayersToJoin,
-	ServerGameMode_WaitingForWhiteToPlay,
-	ServerGameMode_WaitingForBlackToPlay,
-	ServerGameMode_GameEnded,
-
-	ServerGameMode_Count,
-};
-
 struct server_state
 {
-	server_game_mode Mode;
 	memory_arena ServerArena;
 
 	chess_game_context ChessContext;
@@ -125,11 +113,24 @@ s32 main(s32 ArgumentCount, char** Arguments)
 
 				network_synchess_message Message = {};
 				Message.Type = NetworkMessageType_ConnectionEstablished;
-				Message.ConnectionEstablished.Color = (piece_color)(ServerState->CurrentClientCount);
-				SDLNet_TCP_Send(ServerState->ClientSockets[ServerState->CurrentClientCount], &Message, sizeof(Message));
+				Message.ConnectionEstablished.GivenColor = (piece_color)(ServerState->CurrentClientCount);
+				NetSendMessage(ServerState->ClientSockets[ServerState->CurrentClientCount], &Message);
 				++ServerState->CurrentClientCount;
 
 				printf("A new client connected !\n");
+
+				if(ServerState->CurrentClientCount == ArrayCount(ServerState->ClientSockets))
+				{
+					// NOTE(hugo) : Broadcast to all that the game has started.
+					network_synchess_message Message = {};
+					Message.Type = NetworkMessageType_GameStarted;
+					for(u32 SocketIndex = 0; 
+							SocketIndex < ArrayCount(ServerState->ClientSockets); 
+							++SocketIndex)
+					{
+						NetSendMessage(ServerState->ClientSockets[SocketIndex], &Message);
+					}
+				}
 			}
 			else
 			{
@@ -138,7 +139,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 				Assert(TempSocket);
 				network_synchess_message Message = {};
 				Message.Type = NetworkMessageType_NoRoomForClient;
-				SDLNet_TCP_Send(TempSocket, &Message, sizeof(Message));
+				NetSendMessage(TempSocket, &Message);
 				SDLNet_TCP_Close(TempSocket);
 			}
 		}
@@ -181,7 +182,13 @@ s32 main(s32 ArgumentCount, char** Arguments)
 							} break;
 						case NetworkMessageType_MoveDone:
 							{
+								// TODO(hugo) : Check that the move the client 
+								// want to do is legal. (also check that
+								// this is indeed the right client who
+								// sent the move)
 								ApplyMove(&ServerState->ChessContext, Message.MoveDone, &ServerState->ServerArena);
+								// TODO(hugo): Check for checkmate, draw, notify players 
+								// for this and change internal game state.
 							} break;
 
 						InvalidDefaultCase;
