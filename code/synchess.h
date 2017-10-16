@@ -106,12 +106,6 @@ struct chess_game_context
 	piece_color PlayerToPlay;
 };
 
-enum user_mode
-{
-	UserMode_MakeMove,
-	UserMode_PromotePawn,
-};
-
 struct tile_list
 {
 	v2i P;

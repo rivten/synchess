@@ -60,7 +60,8 @@ struct network_synchess_message
 internal void
 NetSendMessage(TCPsocket Socket, network_synchess_message* Message)
 {
-	s32 BytesSent = SDLNet_TCP_Send(Socket, Message, sizeof(network_message_type));
-	Assert(BytesSent >= s32(sizeof(network_synchess_message)));
+	s32 SizeOfMessageStruct = sizeof(network_synchess_message);
+	s32 BytesSent = SDLNet_TCP_Send(Socket, Message, SizeOfMessageStruct);
+	Assert(BytesSent >= s32(SizeOfMessageStruct));
 }
 

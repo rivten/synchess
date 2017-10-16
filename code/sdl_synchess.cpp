@@ -92,6 +92,13 @@ struct game_memory
 
 #include "synchess.h"
 
+enum user_mode
+{
+	UserMode_MakeMove,
+	UserMode_PromotePawn,
+	UserMode_WaitForServer,
+};
+
 struct game_state
 {
 	renderer Renderer;
@@ -337,17 +344,17 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		InitialiseArena(&GameState->GameArena, GameArenaSize, GameArenaMemoryBase);
 		InitialiseChessContext(&GameState->ChessContext, &GameState->GameArena);
 
-		GameState->UserMode = UserMode_MakeMove;
-
 		GameState->SquareSizeInPixels = 64;
 		LoadPieceBitmaps(&GameState->PieceBitmaps[0]);
 
 		GameState->ChessContext.PlayerToPlay = PieceColor_White;
 
 		GameState->ClientSocket = ClientSocket;
-		GameState->LocalGame = true;
+		GameState->LocalGame = false;
 		GameState->MyPlayerColor = PieceColor_Count; // NOTE(hugo) : Putting it to something invalid.
 		GameState->HasServerGameStarted = false;
+
+		GameState->UserMode = GameState->LocalGame ? UserMode_MakeMove : UserMode_WaitForServer;
 
 		GameState->IsInitialised = true;
 	}
@@ -362,7 +369,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 		{
 			network_synchess_message Message = {};
 			s32 ReceivedBytes = SDLNet_TCP_Recv(GameState->ClientSocket, &Message, sizeof(Message));
-			Assert(ReceivedBytes <= sizeof(Message));
+			Assert(ReceivedBytes <= (s32)sizeof(Message));
 
 			// NOTE(hugo) : Receiving message
 			switch(Message.Type)
@@ -370,6 +377,7 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 				case NetworkMessageType_ConnectionEstablished:
 					{
 						printf("Connection Established\n");
+						Assert(GameState->MyPlayerColor == PieceColor_Count);
 						GameState->MyPlayerColor = Message.ConnectionEstablished.GivenColor;
 						printf("We are %s\n", (GameState->MyPlayerColor == PieceColor_White) ? 
 								"white" : "black");
@@ -402,46 +410,49 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 			}
 		}
 
-		bool IsMyTurnToPlay = GameState->HasServerGameStarted &&
-			(GameState->ChessContext.PlayerToPlay == GameState->MyPlayerColor);
-
-		if(IsMyTurnToPlay && Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+		if(GameState->UserMode != UserMode_WaitForServer)
 		{
-			GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
-			Assert(IsInsideBoard(GameState->ClickedTile));
-			chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
-			if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
-			{
-				ClearTileHighlighted(GameState);
+			bool IsMyTurnToPlay = GameState->HasServerGameStarted &&
+				(GameState->ChessContext.PlayerToPlay == GameState->MyPlayerColor);
 
-				temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
-				tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
-						GameState->ClickedTile, &GameState->GameArena);
-				if(PossibleMoveList)
+			if(IsMyTurnToPlay && Pressed(Input->Mouse.Buttons[MouseButton_Left]))
+			{
+				GameState->ClickedTile = GetClickedTile(GameState->ChessContext.Chessboard, Input->Mouse.P);
+				Assert(IsInsideBoard(GameState->ClickedTile));
+				chess_piece* Piece = GameState->ChessContext.Chessboard[BOARD_COORD(GameState->ClickedTile)];
+				if(Piece && (Piece->Color == GameState->ChessContext.PlayerToPlay))
 				{
-					DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
+					ClearTileHighlighted(GameState);
+
+					temporary_memory HighlightingTileTempMemory = BeginTemporaryMemory(&GameState->GameArena);
+					tile_list* PossibleMoveList = GetPossibleMoveList(&GameState->ChessContext, Piece, 
+							GameState->ClickedTile, &GameState->GameArena);
+					if(PossibleMoveList)
+					{
+						DeleteInvalidMoveDueToCheck(&GameState->ChessContext, Piece, GameState->ClickedTile, &PossibleMoveList, GameState->ChessContext.PlayerToPlay, &GameState->GameArena);
+					}
+
+					HighlightPossibleMoves(GameState, PossibleMoveList);
+					EndTemporaryMemory(HighlightingTileTempMemory);
+
+
+					GameState->SelectedPieceP = GameState->ClickedTile;
 				}
-
-				HighlightPossibleMoves(GameState, PossibleMoveList);
-				EndTemporaryMemory(HighlightingTileTempMemory);
-
-
-				GameState->SelectedPieceP = GameState->ClickedTile;
-			}
-			else
-			{
-				move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
-				if(ClickMoveType != MoveType_None)
+				else
 				{
-					move_params MoveParams = {};
-					MoveParams.Type = ClickMoveType;
-					MoveParams.InitialP = GameState->SelectedPieceP;
-					MoveParams.DestP = GameState->ClickedTile;
+					move_type ClickMoveType = GameState->TileHighlighted[BOARD_COORD(GameState->ClickedTile)];
+					if(ClickMoveType != MoveType_None)
+					{
+						move_params MoveParams = {};
+						MoveParams.Type = ClickMoveType;
+						MoveParams.InitialP = GameState->SelectedPieceP;
+						MoveParams.DestP = GameState->ClickedTile;
 
-					network_synchess_message Message = {};
-					Message.Type = NetworkMessageType_MoveDone;
-					Message.MoveDone = MoveParams;
-					NetSendMessage(GameState->ClientSocket, &Message);
+						network_synchess_message Message = {};
+						Message.Type = NetworkMessageType_MoveDone;
+						Message.MoveDone = MoveParams;
+						NetSendMessage(GameState->ClientSocket, &Message);
+					}
 				}
 			}
 		}
@@ -675,22 +686,6 @@ s32 main(s32 ArgumentCount, char** Arguments)
 
 	s32 ClientSocketActivity = SDLNet_SocketReady(ClientSocket);
 	Assert(ClientSocketActivity != -1);
-
-	if(ClientSocketActivity > 0)
-	{
-		s32 MessageFromServer = SDLNet_SocketReady(ClientSocket);
-		Assert(MessageFromServer != -1);
-		if(MessageFromServer > 0)
-		{
-			network_synchess_message Message = {};
-			s32 ReceivedBytes = SDLNet_TCP_Recv(ClientSocket, &Message, sizeof(Message));
-			Assert(ReceivedBytes != -1);
-			Assert(ReceivedBytes <= (s32)sizeof(Message));
-
-			// NOTE(hugo) : This should be the welcoming message
-			printf("0x%08X\n", *(u32*)&Message);
-		}
-	}
 	// }
 
 	while(Running)
@@ -719,7 +714,8 @@ s32 main(s32 ArgumentCount, char** Arguments)
 		// }
 		//
 
-		SDLNet_CheckSockets(SocketSet, 0);
+		s32 CheckSocketResult = SDLNet_CheckSockets(SocketSet, 0);
+		Assert(CheckSocketResult != -1);
 
 		GameUpdateAndRender(&GameMemory, NewInput, Renderer, ClientSocket);
 
