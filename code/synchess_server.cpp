@@ -62,7 +62,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 			ServerState->SocketSet = SDLNet_AllocSocketSet(MaxSocketCount);
 			Assert(ServerState->SocketSet);
 
-			u32 MaxClientCount = MaxSocketCount - 1; // NOTE(hugo) : The server needs a socket.
+			//u32 MaxClientCount = MaxSocketCount - 1; // NOTE(hugo) : The server needs a socket.
 			ServerState->CurrentClientCount = 0;
 
 			for(u32 ClientIndex = 0; ClientIndex < ArrayCount(ServerState->ClientSockets); ++ClientIndex)
@@ -170,7 +170,7 @@ s32 main(s32 ArgumentCount, char** Arguments)
 				{
 					// NOTE(hugo) : A message was received
 					printf("Received from client #%i : %08x\n", ClientIndex, Message.Type);
-					piece_color ClientColor = (piece_color)(ClientIndex);
+					//piece_color ClientColor = (piece_color)(ClientIndex);
 					switch(Message.Type)
 					{
 						case NetworkMessageType_ConnectionEstablished:
