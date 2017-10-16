@@ -11,6 +11,9 @@
 
 #include "input.h"
 
+#define NotImplemented Assert(!"NotImplemented")
+
+
 global_variable u32 GlobalWindowWidth = 512;
 global_variable u32 GlobalWindowHeight = 512;
 
@@ -320,6 +323,34 @@ HighlightPossibleMoves(game_state* GameState, tile_list* TileList)
 	}
 }
 
+internal void
+MapConfigToChessboard(board_tile* Chessboard, chessboard_config Config)
+{
+	for(u32 SquareY = 0; SquareY < 8; ++SquareY)
+	{
+		for(u32 SquareX = 0; SquareX < 8; ++SquareX)
+		{
+			u8 ConfigTile = Config.Tiles[SquareX + 8 * SquareY];
+			chess_piece* PieceToWrite = Chessboard[SquareX + 8 * SquareY];
+			if(ConfigTile == 0)
+			{
+				PieceToWrite = 0;
+			}
+			else
+			{
+				u8 PieceID = ConfigTile - 1;
+				piece_type PieceType = piece_type(PieceID % PieceType_Count);
+				piece_color PieceColor = piece_color(PieceID / PieceColor_Count);
+				chess_piece Piece = {};
+				Piece.Type = PieceType;
+				Piece.Color = PieceColor;
+				// TODO(hugo) : Search in a LUT ?
+				NotImplemented;
+			}
+		}
+	}
+}
+
 #include "synchess_network.h"
 
 // TODO(hugo) : Get rid of the SDL_Renderer parameter in there : 
@@ -394,10 +425,20 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 					} break;
 				case NetworkMessageType_ChessContextUpdate:
 					{
+						MapConfigToChessboard(GameState->ChessContext.Chessboard, Message.ContextUpdate.NewBoardConfig);
+						GameState->ChessContext.CastlingPieceTracker[0] = Message.ContextUpdate.CastlingPieceTracker[0];
+						GameState->ChessContext.CastlingPieceTracker[1] = Message.ContextUpdate.CastlingPieceTracker[1];
+						GameState->ChessContext.PlayerCheck             = Message.ContextUpdate.PlayerCheck;
+						GameState->ChessContext.LastDoubleStepCol       = Message.ContextUpdate.LastDoubleStepCol;
+						GameState->ChessContext.PlayerToPlay            = Message.ContextUpdate.PlayerToPlay;
 					} break;
 				case NetworkMessageType_GameStarted:
 					{
 						GameState->HasServerGameStarted = true;
+						if(GameState->MyPlayerColor == PieceColor_White)
+						{
+							GameState->UserMode = UserMode_MakeMove;
+						}
 					} break;
 				case NetworkMessageType_MoveDone:
 					{
@@ -451,9 +492,15 @@ GameUpdateAndRender(game_memory* GameMemory, game_input* Input, SDL_Renderer* SD
 						network_synchess_message Message = {};
 						Message.Type = NetworkMessageType_MoveDone;
 						Message.MoveDone = MoveParams;
+
 						NetSendMessage(GameState->ClientSocket, &Message);
+						GameState->UserMode = UserMode_WaitForServer;
 					}
 				}
+			}
+			if(Pressed(Input->Mouse.Buttons[MouseButton_Right]))
+			{
+				ClearTileHighlighted(GameState);
 			}
 		}
 	}

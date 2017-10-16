@@ -40,7 +40,7 @@ struct network_message_chess_context_update
 
 	// TODO(hugo) : Necessary here ? Or other message to send
 	// checkmate status ? What about draw ?
-	player_select PlayerCheckmate;
+	//player_select PlayerCheckmate;
 	u32 LastDoubleStepCol;
 	piece_color PlayerToPlay;
 };
@@ -53,7 +53,7 @@ struct network_synchess_message
 	{
 		network_message_connection_establised ConnectionEstablished;
 		network_message_move_done MoveDone;
-		network_message_chess_context_update BoardUpdate;
+		network_message_chess_context_update ContextUpdate;
 	};
 };
 

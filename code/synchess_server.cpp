@@ -187,6 +187,23 @@ s32 main(s32 ArgumentCount, char** Arguments)
 								// this is indeed the right client who
 								// sent the move)
 								ApplyMove(&ServerState->ChessContext, Message.MoveDone, &ServerState->ServerArena);
+								network_synchess_message Message = {};
+								Message.Type = NetworkMessageType_ChessContextUpdate;
+								Message.ContextUpdate.NewBoardConfig = WriteConfig(ServerState->ChessContext.Chessboard);
+								Message.ContextUpdate.CastlingPieceTracker[0] = ServerState->ChessContext.CastlingPieceTracker[0];
+								Message.ContextUpdate.CastlingPieceTracker[1] = ServerState->ChessContext.CastlingPieceTracker[1];
+								Message.ContextUpdate.PlayerCheck = ServerState->ChessContext.PlayerCheck;
+
+								Message.ContextUpdate.LastDoubleStepCol = ServerState->ChessContext.LastDoubleStepCol;
+								Message.ContextUpdate.PlayerToPlay = ServerState->ChessContext.PlayerToPlay;
+								for(u32 ClientIndex = 0;
+										ClientIndex < ArrayCount(ServerState->ClientSockets);
+										++ClientIndex)
+								{
+									TCPsocket ClientSocket = ServerState->ClientSockets[ClientIndex];
+									NetSendMessage(ClientSocket, &Message);
+
+								}
 								// TODO(hugo): Check for checkmate, draw, notify players 
 								// for this and change internal game state.
 							} break;
